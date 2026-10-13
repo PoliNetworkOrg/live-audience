@@ -1,0 +1,89 @@
+<!doctype html>
+<!--
+  A minimal HTML presentation driven by PoliNetwork Live.
+
+  Open it as  demo-presentation.html?url=http://localhost:5173&key=<API key>
+  (works straight from the file system). Arrow keys / space move between slides.
+
+  Slides marked with data-live put that activity on stage when you reach them; a results slide
+  marked data-live-status="closed" stops voting and shows the live chart.
+-->
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Live demo</title>
+    <style>
+      body { margin: 0; font-family: system-ui, sans-serif; background: #0b1b30; color: white; }
+      section { display: none; height: 100vh; box-sizing: border-box; padding: 8vh 10vw; flex-direction: column; justify-content: center; }
+      section.current { display: flex; }
+      h1 { font-size: 5vw; margin: 0 0 4vh; }
+      p { font-size: 2.2vw; opacity: 0.8; }
+      .bars { display: grid; gap: 2vh; }
+      .bar { position: relative; font-size: 2.4vw; padding: 1.5vh 1vw; border-radius: 12px; background: #ffffff14; overflow: hidden; }
+      .bar span { position: relative; }
+      .bar .fill { position: absolute; inset: 0 auto 0 0; background: #7dd3fc55; transition: width 0.4s ease; }
+      .bar b { float: right; position: relative; }
+      .hint { position: fixed; bottom: 2vh; right: 2vw; opacity: 0.4; font-size: 14px; }
+    </style>
+  </head>
+  <body>
+    <section data-live="clear">
+      <h1>Welcome 👋</h1>
+      <p>Open the PoliNetwork Live page on your phone and sign in.</p>
+    </section>
+
+    <section data-live="dinner-poll">
+      <h1>Vote now on your phone 📱</h1>
+      <p>The poll opened as soon as this slide appeared.</p>
+      <div class="bars" data-results="dinner-poll"></div>
+    </section>
+
+    <section data-live="dinner-poll" data-live-status="closed">
+      <h1>Results</h1>
+      <div class="bars" data-results="dinner-poll"></div>
+    </section>
+
+    <section data-live="clear">
+      <h1>Thanks!</h1>
+    </section>
+
+    <div class="hint">← → to move</div>
+
+    <script type="module">
+      const params = new URLSearchParams(location.search)
+      const url = params.get("url") ?? "http://localhost:5173"
+      const key = params.get("key")
+      const { LiveAudience } = await import(`${url}/live-audience.js`)
+      const live = new LiveAudience({ url, key })
+
+      // Slide navigation, the dumbest possible way.
+      const slides = [...document.querySelectorAll("section")]
+      let index = 0
+      function show(i) {
+        index = Math.max(0, Math.min(slides.length - 1, i))
+        for (const [n, s] of slides.entries()) s.classList.toggle("current", n === index)
+        live.applySlide(slides[index]).catch((e) => console.error(e))
+      }
+      addEventListener("keydown", (e) => {
+        if (["ArrowRight", " ", "PageDown"].includes(e.key)) show(index + 1)
+        if (["ArrowLeft", "PageUp"].includes(e.key)) show(index - 1)
+      })
+      show(0)
+
+      const escapeHtml = (text) => text.replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`)
+
+      // Live results into every element that asks for them.
+      for (const el of document.querySelectorAll("[data-results]")) {
+        live.onResults(el.dataset.results, ({ results }) => {
+          const max = Math.max(1, ...results.options.map((o) => o.votes))
+          el.innerHTML = results.options
+            .map(
+              (o) => `<div class="bar"><div class="fill" style="width:${(o.votes / max) * 100}%"></div>
+                <span>${escapeHtml(o.label)}</span><b>${o.votes}</b></div>`,
+            )
+            .join("")
+        })
+      }
+    </script>
+  </body>
+</html>

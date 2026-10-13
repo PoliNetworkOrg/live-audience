@@ -1,0 +1,51 @@
+@import "tailwindcss";
+@import "@fontsource-variable/dm-sans";
+
+@source "../activities";
+
+@theme {
+  --font-sans: "DM Sans Variable", ui-sans-serif, system-ui, sans-serif;
+  /* PoliNetwork blues, from the website's palette */
+  --color-brand-950: oklch(20% 0.055 252);
+  --color-brand-900: oklch(26% 0.065 251);
+  --color-brand-800: oklch(35.13% 0.062 249.28);
+  --color-brand-500: oklch(62% 0.17 255);
+  --color-brand-400: var(--color-blue-400);
+  --color-brand-300: var(--color-sky-300);
+}
+
+@layer base {
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+}
+
+@keyframes float {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(0, -12px, 0) scale(1.04);
+  }
+}
+
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.animate-float {
+  animation: float 6s ease-in-out infinite;
+}
+
+.animate-pop-in {
+  animation: pop-in 0.35s cubic-bezier(0.2, 0.9, 0.3, 1.2) both;
+}
