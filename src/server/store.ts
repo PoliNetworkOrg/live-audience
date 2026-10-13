@@ -1,5 +1,22 @@
-import { randomBytes, randomUUID } from "node:crypto"
+import { randomBytes, randomInt, randomUUID } from "node:crypto"
 import { EventEmitter } from "node:events"
+import {
+  isCorrect,
+  type MemoryQuizConfig,
+  type MemoryQuizDraw,
+  memoryQuiz,
+} from "../activities/memory-quiz/definition.ts"
+import {
+  type NumberEstimateDraw,
+  type NumberEstimateResponse,
+  numberEstimate,
+} from "../activities/number-estimate/definition.ts"
+import {
+  closestEntries,
+  type NumberLotteryDraw,
+  type NumberLotteryResponse,
+  numberLottery,
+} from "../activities/number-lottery/definition.ts"
 import { getActivityDefinition } from "../activities/registry.ts"
 import type { StoredResponse } from "../activities/types.ts"
 import type { Database } from "./db.ts"
@@ -121,6 +138,20 @@ export class Store {
 
   updateActivity(id: string, patch: { title?: string; slug?: string; config?: unknown }): Activity {
     const activity = this.requireActivity(id)
+    if (
+      patch.config !== undefined &&
+      activity.type === memoryQuiz.type &&
+      this.getSetting(`quiz-draw:${activity.id}`)
+    ) {
+      throw new StoreError(409, "Reset this quiz before editing its question or answers")
+    }
+    if (
+      patch.config !== undefined &&
+      activity.type === numberEstimate.type &&
+      (this.listResponses(activity.id).length || this.getSetting(`number-draw:${activity.id}`))
+    ) {
+      throw new StoreError(409, "Reset this estimate before editing its question or target")
+    }
     const definition = getActivityDefinition(activity.type)
     if (!definition) throw new StoreError(400, `Unknown activity type "${activity.type}"`)
     let config = activity.config
@@ -149,6 +180,8 @@ export class Store {
     const activity = this.requireActivity(id)
     if (this.getStage().activityId === activity.id) this.clearStage()
     this.db.prepare("DELETE FROM activities WHERE id = ?").run(activity.id)
+    this.db.prepare("DELETE FROM settings WHERE key = ?").run(`number-draw:${activity.id}`)
+    this.db.prepare("DELETE FROM settings WHERE key = ?").run(`quiz-draw:${activity.id}`)
   }
 
   private assertSlugFree(slug: string) {
@@ -184,17 +217,38 @@ export class Store {
       throw new StoreError(409, "This activity is not accepting answers right now")
     }
     const activity = this.requireActivity(activityId)
+    this.assertCanOpen(activity)
     const definition = getActivityDefinition(activity.type)
     if (!definition) throw new StoreError(400, `Unknown activity type "${activity.type}"`)
     const parsed = definition.responseSchema(activity.config).safeParse(response)
     if (!parsed.success) throw new StoreError(400, "Invalid answer", parsed.error.issues)
-    this.db
-      .prepare(
-        `INSERT INTO responses (activity_id, user_id, user_name, response, updated_at) VALUES (?, ?, ?, ?, ?)
+    const quizWinner: MemoryQuizDraw | null =
+      activity.type === memoryQuiz.type && isCorrect(activity.config as MemoryQuizConfig, parsed.data.answer)
+        ? {
+            answer: (activity.config as MemoryQuizConfig).acceptedAnswers[0] as string,
+            winner: { name: parsed.data.name, answer: parsed.data.answer },
+            drawnAt: Date.now(),
+          }
+        : null
+    if (quizWinner) this.db.exec("BEGIN")
+    try {
+      this.db
+        .prepare(
+          `INSERT INTO responses (activity_id, user_id, user_name, response, updated_at) VALUES (?, ?, ?, ?, ?)
          ON CONFLICT (activity_id, user_id) DO UPDATE SET
            user_name = excluded.user_name, response = excluded.response, updated_at = excluded.updated_at`,
-      )
-      .run(activity.id, user.id, user.name, JSON.stringify(parsed.data), Date.now())
+        )
+        .run(activity.id, user.id, user.name, JSON.stringify(parsed.data), Date.now())
+      if (quizWinner) {
+        this.setSetting(`quiz-draw:${activity.id}`, quizWinner)
+        this.setSetting("stage", { ...stage, status: "closed", changedAt: quizWinner.drawnAt })
+        this.db.exec("COMMIT")
+      }
+    } catch (error) {
+      if (quizWinner) this.db.exec("ROLLBACK")
+      throw error
+    }
+    if (quizWinner) this.events.emit("stage", this.getStage())
     this.events.emit("results", activity.id)
     return parsed.data
   }
@@ -202,7 +256,15 @@ export class Store {
   resetResponses(idOrSlug: string): void {
     const activity = this.requireActivity(idOrSlug)
     this.db.prepare("DELETE FROM responses WHERE activity_id = ?").run(activity.id)
+    this.db.prepare("DELETE FROM settings WHERE key = ?").run(`number-draw:${activity.id}`)
+    this.db.prepare("DELETE FROM settings WHERE key = ?").run(`quiz-draw:${activity.id}`)
     this.events.emit("results", activity.id)
+    if (
+      [numberLottery.type, numberEstimate.type, memoryQuiz.type].includes(activity.type) &&
+      this.getStage().activityId === activity.id
+    ) {
+      this.events.emit("stage", this.getStage())
+    }
   }
 
   getResults(idOrSlug: string) {
@@ -214,7 +276,157 @@ export class Store {
       slug: activity.slug,
       type: activity.type,
       title: activity.title,
-      results: definition.aggregate(activity.config, this.listResponses(activity.id)),
+      results: [numberLottery.type, numberEstimate.type].includes(activity.type)
+        ? {
+            ...definition.aggregate(activity.config, this.listResponses(activity.id)),
+            draw:
+              this.getSetting<NumberLotteryDraw | NumberEstimateDraw>(`number-draw:${activity.id}`) ?? null,
+          }
+        : activity.type === memoryQuiz.type
+          ? {
+              ...definition.aggregate(activity.config, this.listResponses(activity.id)),
+              draw: this.getSetting<MemoryQuizDraw>(`quiz-draw:${activity.id}`) ?? null,
+            }
+          : definition.aggregate(activity.config, this.listResponses(activity.id)),
+    }
+  }
+
+  /** Reveal an unanswered quiz, or return its already recorded first correct winner. */
+  drawQuiz(idOrSlug: string) {
+    const activity = this.requireActivity(idOrSlug)
+    if (activity.type !== memoryQuiz.type) throw new StoreError(400, "This activity is not a memory quiz")
+    if (this.getSetting(`quiz-draw:${activity.id}`)) return this.getResults(activity.id)
+    const stage = this.getStage()
+    if (stage.activityId !== activity.id) throw new StoreError(409, "Put this activity on stage first")
+    const parsedConfig = memoryQuiz.configSchema.safeParse(activity.config)
+    if (!parsedConfig.success)
+      throw new StoreError(400, "Save a valid quiz before revealing the answer", parsedConfig.error.issues)
+    const config = parsedConfig.data
+    const draw: MemoryQuizDraw = {
+      answer: config.acceptedAnswers[0] as string,
+      winner: null,
+      drawnAt: Date.now(),
+    }
+    this.db.exec("BEGIN")
+    try {
+      this.setSetting(`quiz-draw:${activity.id}`, draw)
+      this.setSetting("stage", { ...stage, status: "closed", changedAt: draw.drawnAt })
+      this.db.exec("COMMIT")
+    } catch (error) {
+      this.db.exec("ROLLBACK")
+      throw error
+    }
+    this.events.emit("stage", this.getStage())
+    this.events.emit("results", activity.id)
+    return this.getResults(activity.id)
+  }
+
+  drawActivity(idOrSlug: string) {
+    const type = this.requireActivity(idOrSlug).type
+    return type === memoryQuiz.type
+      ? this.drawQuiz(idOrSlug)
+      : type === numberEstimate.type
+        ? this.drawEstimate(idOrSlug)
+        : this.drawNumber(idOrSlug)
+  }
+
+  /** Reveal a configured real figure without exposing other participants' guesses. */
+  drawEstimate(idOrSlug: string) {
+    const activity = this.requireActivity(idOrSlug)
+    if (activity.type !== numberEstimate.type)
+      throw new StoreError(400, "This activity is not a number estimate")
+    if (this.getSetting(`number-draw:${activity.id}`)) return this.getResults(activity.id)
+    const stage = this.getStage()
+    if (stage.activityId !== activity.id) throw new StoreError(409, "Put this activity on stage first")
+    const config = numberEstimate.configSchema.parse(activity.config)
+    const entries = (this.listResponses(activity.id) as StoredResponse<NumberEstimateResponse>[]).map(
+      ({ response }) => response,
+    )
+    const { closest, distance } = closestEntries(entries, config.target)
+    const draw: NumberEstimateDraw = {
+      number: config.target,
+      distance: entries.length ? distance : null,
+      tied: closest.length,
+      winner: closest.length ? (closest[randomInt(closest.length)] ?? null) : null,
+      drawnAt: Date.now(),
+    }
+    this.db.exec("BEGIN")
+    try {
+      this.setSetting(`number-draw:${activity.id}`, draw)
+      this.setSetting("stage", { ...stage, status: "closed", changedAt: draw.drawnAt })
+      this.db.exec("COMMIT")
+    } catch (error) {
+      this.db.exec("ROLLBACK")
+      throw error
+    }
+    this.events.emit("stage", this.getStage())
+    this.events.emit("results", activity.id)
+    return this.getResults(activity.id)
+  }
+
+  /** Server-owned, persistent and idempotent draw. No caller can supply the target number. */
+  drawNumber(idOrSlug: string) {
+    const activity = this.requireActivity(idOrSlug)
+    if (activity.type !== numberLottery.type)
+      throw new StoreError(400, "This activity is not a number lottery")
+    if (this.getSetting<NumberLotteryDraw>(`number-draw:${activity.id}`)) return this.getResults(activity.id)
+    const stage = this.getStage()
+    if (stage.activityId !== activity.id) throw new StoreError(409, "Put this activity on stage first")
+    const config = numberLottery.configSchema.parse(activity.config)
+    const results = numberLottery.aggregate(
+      config,
+      this.listResponses(activity.id) as StoredResponse<NumberLotteryResponse>[],
+    )
+    if (!results.entries.length) throw new StoreError(409, "At least one participant is required")
+    const number = randomInt(0, 101)
+    const { closest, distance } = closestEntries(results.entries, number)
+    const draw: NumberLotteryDraw = {
+      number,
+      distance,
+      closest,
+      winners: [closest[randomInt(closest.length)] as (typeof closest)[number]],
+      drawnAt: Date.now(),
+    }
+    const closed: Stage = { ...stage, status: "closed", changedAt: draw.drawnAt }
+    this.db.exec("BEGIN")
+    try {
+      this.setSetting(`number-draw:${activity.id}`, draw)
+      this.setSetting("stage", closed)
+      this.db.exec("COMMIT")
+    } catch (error) {
+      this.db.exec("ROLLBACK")
+      throw error
+    }
+    this.events.emit("stage", closed)
+    this.events.emit("results", activity.id)
+    return this.getResults(activity.id)
+  }
+
+  private assertCanOpen(activity: Activity) {
+    if (
+      [numberLottery.type, numberEstimate.type].includes(activity.type) &&
+      this.getSetting(`number-draw:${activity.id}`)
+    ) {
+      throw new StoreError(
+        409,
+        activity.type === numberLottery.type
+          ? "Reset this lottery before reopening entries"
+          : "Reset this estimate before reopening entries",
+      )
+    }
+    if (activity.type === memoryQuiz.type && this.getSetting(`quiz-draw:${activity.id}`)) {
+      throw new StoreError(409, "Reset this quiz before reopening answers")
+    }
+    if (
+      activity.type === numberEstimate.type &&
+      !numberEstimate.configSchema.safeParse(activity.config).success
+    ) {
+      throw new StoreError(400, "Save a valid number estimate before opening guesses")
+    }
+    if (activity.type === memoryQuiz.type) {
+      const parsed = memoryQuiz.configSchema.safeParse(activity.config)
+      if (!parsed.success)
+        throw new StoreError(400, "Save a valid quiz before opening answers", parsed.error.issues)
     }
   }
 
@@ -227,6 +439,7 @@ export class Store {
   /** Puts an activity on stage (replacing whatever was there) and opens or closes it. */
   setStage(idOrSlug: string, status: StageStatus): Stage {
     const activity = this.requireActivity(idOrSlug)
+    if (status === "open") this.assertCanOpen(activity)
     return this.writeStage({ activityId: activity.id, status, changedAt: Date.now() })
   }
 
@@ -234,7 +447,7 @@ export class Store {
   setStageStatus(status: StageStatus): Stage {
     const stage = this.getStage()
     if (!stage.activityId) throw new StoreError(409, "Nothing is on stage")
-    return this.writeStage({ ...stage, status, changedAt: Date.now() })
+    return this.setStage(stage.activityId, status)
   }
 
   /** Back to the idle screen. */

@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Live word cloud</title>
+    <style>
+      body { margin: 0; padding: 5vh 6vw; font-family: system-ui, sans-serif; background: #0b1b30; color: white; }
+      h1 { font-size: clamp(24px, 4vw, 64px); }
+      #cloud { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 16px 24px; min-height: 50vh; }
+      #cloud span { max-width: 100%; overflow-wrap: anywhere; font-weight: 700; line-height: 1.2; transition: font-size 0.3s; }
+      button { padding: 12px 20px; cursor: pointer; }
+      #status { min-height: 1.5em; }
+    </style>
+  </head>
+  <body>
+    <h1 id="prompt">Word cloud</h1>
+    <p>Open PoliNetwork Live on your phone and sign in.</p>
+    <button type="button" id="open">Open answers</button>
+    <button type="button" id="close">Close answers</button>
+    <p id="status" role="status"></p>
+    <section id="cloud" aria-label="Word cloud">Waiting for answers…</section>
+    <p id="total"></p>
+    <script type="module">
+      // ?url=http://localhost:5173&key=<API key>&activity=gadget-ideas
+      const params = new URLSearchParams(location.search)
+      const url = params.get("url") ?? "http://localhost:5173"
+      const slug = params.get("activity") ?? "gadget-ideas"
+      const status = document.getElementById("status")
+      try {
+        const { LiveAudience } = await import(`${url}/live-audience.js`)
+        const live = new LiveAudience({ url, key: params.get("key") })
+        // Validate the key and slug before opening a reconnecting event stream.
+        await live.results(slug)
+        const run = async (action) => {
+          try { await action(); status.textContent = "" }
+          catch (error) { status.textContent = error.message }
+        }
+        document.getElementById("open").onclick = () => run(() => live.open(slug))
+        document.getElementById("close").onclick = () => run(() => live.show(slug))
+        const stop = live.onResults(slug, ({ type, results }) => {
+          if (type !== "word-cloud") { status.textContent = "Choose a word-cloud activity."; return }
+          document.getElementById("prompt").textContent = results.prompt
+          document.getElementById("total").textContent = `${results.totalRespondents} respondents`
+          const cloud = document.getElementById("cloud")
+          cloud.replaceChildren()
+          const max = results.words.reduce((value, word) => Math.max(value, word.count), 1)
+          for (const { text, count } of results.words) {
+            const word = document.createElement("span")
+            word.textContent = text
+            word.title = `${count} respondents`
+            word.style.fontSize = `${18 + 64 * count / max}px`
+            word.style.color = "#7dd3fc"
+            cloud.append(word)
+          }
+          if (!results.words.length) cloud.textContent = "Waiting for answers…"
+        })
+        addEventListener("pagehide", stop, { once: true })
+      } catch (error) { status.textContent = error.message }
+    </script>
+  </body>
+</html>

@@ -78,6 +78,11 @@ export class LiveAudience {
     return this.request(`/activities/${encodeURIComponent(slug)}/results`)
   }
 
+  /** Draw a persistent number lottery outcome, or close and reveal a memory quiz. */
+  draw(slug) {
+    return this.request(`/activities/${encodeURIComponent(slug)}/draw`, { method: "POST" })
+  }
+
   /** Deletes every answer to an activity. */
   reset(slug) {
     return this.request(`/activities/${encodeURIComponent(slug)}/reset`, { method: "POST" })

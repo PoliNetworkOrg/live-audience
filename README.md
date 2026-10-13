@@ -1,6 +1,6 @@
 # PoliNetwork Live
 
-Live audience interaction (polls now, more types later) for PoliNetwork presentations.
+Live audience interaction (polls, word clouds, a prize wheel, a number lottery and memory quizzes) for PoliNetwork presentations.
 
 - **Audience page** (`/`): Soci sign in with the PoliNetwork IdP and see whatever is "on stage", usually nothing. When the presenter opens an activity it appears there, live.
 - **Admin page** (`/admin`): create and edit activities, put them on stage by hand, preview results, manage the API key. Reserved to an IdP permission.
@@ -115,13 +115,85 @@ Plain HTTP: `Authorization: Bearer <key>` (or `?key=`, which `EventSource` needs
 | `GET /api/v1/activities` | Every activity with its config |
 | `GET /api/v1/activities/:slug/results` | `{ id, slug, type, title, results }` |
 | `POST /api/v1/activities/:slug/reset` | Delete all answers |
+| `POST /api/v1/activities/:slug/draw` | Draw a lottery, reveal a real number or a quiz; outcome and winner persist |
 | `GET /api/v1/events[?activity=<slug>]` | SSE: `stage` events, and `results` for what is on stage (or for that activity) |
 
 Poll results look like `{ question, totalVoters, options: [{ id, label, votes, percent }] }`. Results never include who answered.
 
+Word clouds accept free words or short phrases, one per line. In Admin, create a **Word cloud**,
+set its prompt and the maximum entries per person (1–10, default 3), then put it on stage.
+Each entry can contain up to 60 characters. Case, Unicode and whitespace variants are merged;
+phrases stay together and repeated entries count once per person. A new answer replaces that
+person's previous entries, until answers close.
+
+The admin's live preview shows a cloud with larger text for more frequent entries. Presentation
+results are `{ prompt, totalRespondents, words: [{ text, count }] }`, sorted by frequency, without
+respondent identities. The existing stage, results, reset and SSE endpoints work for this type too.
+
+For a standalone presentation example, create a word cloud with slug `gadget-ideas` and open
+`examples/demo-word-cloud.html?url=http://localhost:5173&key=<API key>&activity=gadget-ideas`.
+The example receives the live cloud and lets the presenter open or close answers.
+
 The key is the only protection of this API: keep it out of public repositories and regenerate it (Admin → API) if it leaks. Old keys stop working immediately.
 
 ## Adding an activity type
+
+**Purchase interest** (`type: "purchase-interest"`) asks `{ question }` with yes/no responses:
+`{ buy: false }`, or `{ buy: true, price: number }`, requiring a non-negative whole euro price
+for yes. No responses discard any attached price. Each person's latest response replaces the
+previous one until closure. Results are `{ question, totalRespondents, yes, no, noPercent, bands }`;
+each band contains `{ min, max, label, count, percent }`. Prices use €10 bands: 0–10 inclusive,
+11–20, 21–30, etc. Only populated price bands are returned, sorted ascending; no responses
+form a single separate bar. Percentages use all respondents, and results include no identities.
+
+**Guess the real number** (`type: "number-estimate"`) asks for a submitted display name
+and integer from 0 to 1,000,000. Config is `{ prompt, target }`; participants receive only
+`{ prompt }`. The draw endpoint reveals the configured real figure, selects the nearest
+guess and randomly chooses one winner among ties. Results contain
+`{ prompt, totalParticipants, draw }`, where draw is
+`{ number, distance, tied, winner: { name, number } | null, drawnAt }`.
+Other guesses and account identities never leave the API. Empty rounds can reveal the
+figure without a winner. Reset is required to reopen or change the target after guesses.
+
+**Memory quiz** (`type: "memory-quiz"`) accepts a free-text `{ name, answer }` response.
+Config is `{ question, acceptedAnswers: string[] }`; participants receive only `{ question }`.
+Optional `answerMode: "choice" | "order"` and `choices: string[]` add multiple choice
+and ordering (2–4 distinct items). Choices are public; acceptedAnswers stay private.
+Order answers join every item exactly once with ` → `. The audience can move items up
+and down with keyboard accessible buttons. Legacy free-text config remains unchanged.
+The first correct response received by the server wins and closes the quiz immediately.
+Case, Unicode/whitespace variants and trailing `. ! ?` are ignored; guessing several possible
+answers in one string does not match. Wrong answers can be updated while the quiz is open.
+
+Results are `{ question, totalParticipants, draw }`, where `draw` is null until a winner or
+manual reveal, then `{ answer, winner: { name, answer } | null, drawnAt }`. Only the winner's
+submitted display name/answer is exported, not other answers or account identities.
+The answer, winner, winning submission and closure are committed together. Reopening requires
+reset; retries and reloads cannot replace the first winner. `POST /activities/:slug/draw`
+manually closes and reveals an unanswered quiz without inventing a winner.
+
+**Number lottery** (`type: "number-lottery"`) accepts `{ name, number }`, with one integer
+from 0 to 100 per signed-in participant and config `{ prompt }`. Participants can update
+their guess until extraction. `POST /api/v1/activities/:slug/draw` (also available under
+`/api/admin`) closes guesses and draws an inclusive 0–100 number on the server. Closest
+absolute distance wins; ties always select one winner randomly among the closest entries.
+This rule is announced on the participant page and the presentation.
+
+Results contain `{ prompt, totalParticipants, entries: [{ name, number }], draw }`; `draw`
+is null until extraction, then `{ number, distance, closest, winners, drawnAt }` with one
+winner. Only submitted display names/guesses are exposed, not account identifiers.
+The outcome persists in SQLite and through SSE; retries and refreshes cannot reroll it.
+Reset deletes the answers and the outcome, allowing a new round. Reopening after a draw
+is rejected until reset. `LiveAudience.draw(slug)` wraps the draw endpoint.
+
+**Wheel of fortune** (`type: "wheel"`) collects one display name per signed-in participant.
+Its config is `{ prompt }`, its response is `{ name }` (1–80 characters after whitespace
+normalization), and its results are `{ prompt, totalParticipants, names: string[] }`.
+The names are explicitly submitted for display on the presentation; account IDs and account
+names are not exported. Two people with the same display name retain two separate chances.
+Use the existing audience response, stage, reset and results/SSE endpoints. Close entries
+before reading the final names and spinning, so late entries cannot change the draw.
+The slide draws the winner; the API does not persist winners or remove them automatically.
 
 Each type lives in `src/activities/<type>/` and has two halves:
 

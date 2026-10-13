@@ -60,6 +60,98 @@ beforeEach(() => {
   app = createApp({ store, session })
 })
 
+describe("a word cloud, driven by a presentation", () => {
+  it("validates free answers, replaces them, publishes counts and supports close/reset", async () => {
+    const created = await call("/api/admin/activities", {
+      as: "admin",
+      body: { type: "word-cloud", title: "Gadgets", slug: "gadget-ideas" },
+    })
+    expect(created.status).toBe(201)
+    const { id } = await created.json()
+    expect(
+      (
+        await call(`/api/admin/activities/${id}`, {
+          as: "admin",
+          method: "PATCH",
+          body: { config: { prompt: "Your ideas?", maxWords: 3 } },
+        })
+      ).status,
+    ).toBe(200)
+    const key = store.getApiKey()
+    const respond = (as: string, words: string[]) =>
+      call("/api/audience/respond", {
+        as,
+        body: { activityId: id, response: { words } },
+      })
+    expect((await respond("socio", ["felpa"])).status).toBe(409)
+    await call("/api/v1/stage", { key, body: { activity: "gadget-ideas" } })
+    expect((await respond("guest", ["felpa"])).status).toBe(403)
+    expect((await respond("socio", ["Felpa", " FELPA "])).status).toBe(200)
+    expect((await respond("admin", ["FELPA", "sticker"])).status).toBe(200)
+    expect((await respond("socio", [" "])).status).toBe(400)
+    const readResults = async () =>
+      (await (await call("/api/v1/activities/gadget-ideas/results", { key })).json()).results
+    expect(await readResults()).toEqual({
+      prompt: "Your ideas?",
+      totalRespondents: 2,
+      words: [
+        { text: "felpa", count: 2 },
+        { text: "sticker", count: 1 },
+      ],
+    })
+    expect((await respond("socio", ["sticker"])).status).toBe(200)
+    expect((await readResults()).words).toEqual([
+      { text: "sticker", count: 2 },
+      { text: "felpa", count: 1 },
+    ])
+    expect(await (await call("/api/audience/stage", { as: "socio" })).json()).toMatchObject({
+      activity: { type: "word-cloud", config: { prompt: "Your ideas?" } },
+      myResponse: { words: ["sticker"] },
+    })
+    await call("/api/v1/stage/close", { key, method: "POST" })
+    expect((await respond("socio", ["felpa"])).status).toBe(409)
+    await call("/api/v1/activities/gadget-ideas/reset", { key, method: "POST" })
+    expect(await readResults()).toEqual({ prompt: "Your ideas?", totalRespondents: 0, words: [] })
+  })
+})
+
+describe("wheel entries", () => {
+  it("collects one display name per member, preserves equal names and closes entries", async () => {
+    const created = await call("/api/admin/activities", {
+      as: "admin",
+      body: { type: "wheel", title: "Draw", slug: "fortune-wheel" },
+    })
+    expect(created.status).toBe(201)
+    const { id } = await created.json()
+    const key = store.getApiKey()
+    const join = (as: string, name: string) =>
+      call("/api/audience/respond", { as, body: { activityId: id, response: { name } } })
+    expect((await join("socio", "Sara")).status).toBe(409)
+    await call("/api/v1/stage", { key, body: { activity: "fortune-wheel" } })
+    expect((await join("guest", "Nico")).status).toBe(403)
+    for (const name of ["  ", "x".repeat(81)]) expect((await join("socio", name)).status).toBe(400)
+    expect((await join("socio", "  Sara   B. ")).status).toBe(200)
+    expect((await join("socio", "Display name")).status).toBe(200)
+    expect((await join("admin", "Display name")).status).toBe(200)
+    const results = await (await call("/api/v1/activities/fortune-wheel/results", { key })).json()
+    expect(results.results).toEqual({
+      prompt: "Enter your name to join the wheel",
+      totalParticipants: 2,
+      names: ["Display name", "Display name"],
+    })
+    expect(JSON.stringify(results)).not.toContain("Sara")
+    expect(JSON.stringify(results)).not.toContain("userId")
+    await call("/api/v1/stage/close", { key, method: "POST" })
+    expect((await join("socio", "Late change")).status).toBe(409)
+    expect(await (await call("/api/audience/stage", { as: "socio" })).json()).toMatchObject({
+      status: "closed",
+      myResponse: { name: "Display name" },
+    })
+    await call("/api/v1/activities/fortune-wheel/reset", { key, method: "POST" })
+    expect(store.getResults(id).results).toMatchObject({ totalParticipants: 0, names: [] })
+  })
+})
+
 describe("access", () => {
   it("keeps the admin API to admins", async () => {
     expect((await call("/api/admin/activities")).status).toBe(401)
