@@ -42,7 +42,7 @@ function Editor({
         </select>
       </Field>
       {config.answerMode && (
-        <Field label="Options / items (one per line, 2–4)">
+        <Field label="Options / items (one per line; 2–4 choices, 2–6 ordered items)">
           <Textarea
             value={(config.choices ?? []).join("\n")}
             onChange={(event) => onChange({ ...config, choices: event.target.value.split("\n") })}

@@ -15,7 +15,7 @@ const configSchema = z
   .object({
     question: z.string().trim().min(1).max(300),
     answerMode: z.enum(["choice", "order"]).optional(),
-    choices: z.array(z.string().trim().min(1).max(32)).min(2).max(4).optional(),
+    choices: z.array(z.string().trim().min(1).max(32)).min(2).max(6).optional(),
     acceptedAnswers: z.array(z.string().trim().min(1).max(120)).min(1).max(10),
   })
   .refine((config) => config.acceptedAnswers.every((answer) => normalizeAnswer(answer).length > 0), {
@@ -28,6 +28,7 @@ const configSchema = z
       if (!mode) return !config.choices
       if (!config.choices || new Set(config.choices.map(normalizeAnswer)).size !== config.choices.length)
         return false
+      if (mode === "choice" && config.choices.length > 4) return false
       if (config.choices.some((choice) => choice.includes("→"))) return false
       return config.acceptedAnswers.every((answer) => validStructuredAnswer(mode, config.choices, answer))
     },

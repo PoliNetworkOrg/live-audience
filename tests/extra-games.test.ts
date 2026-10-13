@@ -39,6 +39,48 @@ describe("structured prize quizzes", () => {
     })
   })
 
+  it("supports events and hackathons in one five-item chronological quiz", () => {
+    const choices = ["FastwebAI Hackathon", "Welcome kit", "GDG AI Hack", "Zurich Hackathon", "ApeMatricole"]
+    const answer = "GDG AI Hack → ApeMatricole → Zurich Hackathon → Welcome kit → FastwebAI Hackathon"
+    const config = memoryQuiz.configSchema.parse({
+      question: "Ordina gli eventi del 2026",
+      answerMode: "order",
+      choices,
+      acceptedAnswers: [answer],
+    })
+    expect(memoryQuiz.responseSchema(config).safeParse({ name: "Ada", answer }).success).toBe(true)
+    expect(
+      memoryQuiz
+        .responseSchema(config)
+        .safeParse({ name: "Ada", answer: "GDG AI Hack → Zurich Hackathon → FastwebAI Hackathon" }).success,
+    ).toBe(false)
+    expect(
+      memoryQuiz
+        .responseSchema(config)
+        .safeParse({ name: "Ada", answer: answer.replace("ApeMatricole", "Welcome kit") }).success,
+    ).toBe(false)
+    expect(
+      memoryQuiz.configSchema.safeParse({ ...config, answerMode: "choice", acceptedAnswers: ["Welcome kit"] })
+        .success,
+    ).toBe(false)
+    const db = openDatabase(":memory:")
+    const store = new Store(db)
+    try {
+      const activity = store.createActivity({
+        type: "memory-quiz",
+        title: "Eventi 2026",
+        slug: "events-order",
+      })
+      store.updateActivity(activity.id, { config })
+      store.setStage(activity.id, "open")
+      store.respond(activity.id, { id: "ada", name: "Private" }, { name: "Ada", answer })
+      expect(store.getStage().status).toBe("closed")
+      expect(store.getResults(activity.id).results.draw.winner).toEqual({ name: "Ada", answer })
+    } finally {
+      db.close()
+    }
+  })
+
   it("awards the first correctly ordered answer and rejects later winners", () => {
     const db = openDatabase(":memory:")
     const store = new Store(db)

@@ -158,7 +158,7 @@ figure without a winner. Reset is required to reopen or change the target after 
 **Memory quiz** (`type: "memory-quiz"`) accepts a free-text `{ name, answer }` response.
 Config is `{ question, acceptedAnswers: string[] }`; participants receive only `{ question }`.
 Optional `answerMode: "choice" | "order"` and `choices: string[]` add multiple choice
-and ordering (2–4 distinct items). Choices are public; acceptedAnswers stay private.
+and ordering (2–4 choices or 2–6 distinct ordered items). Choices are public; acceptedAnswers stay private.
 Order answers join every item exactly once with ` → `. The audience can move items up
 and down with keyboard accessible buttons. Legacy free-text config remains unchanged.
 The first correct response received by the server wins and closes the quiz immediately.
