@@ -141,7 +141,7 @@ Plain HTTP: `Authorization: Bearer <key>` (or `?key=`, which `EventSource` needs
 | `POST /api/v1/stage` | `{ "activity": "<slug>", "status": "open" \| "closed" }`, status defaults to open |
 | `POST /api/v1/stage/open` · `/close` · `/clear` | |
 | `POST /api/v1/stage/presentation` | `{ "presentation": "<slug>" \| null }`: start or end a presentation |
-| `GET /api/v1/activities` | Every activity with its config |
+| `GET /api/v1/activities` | Every activity with its config and how many answered it |
 | `GET /api/v1/activities/:slug/results` | `{ id, slug, type, title, results }` |
 | `POST /api/v1/activities/:slug/reset` | Delete all answers |
 | `POST /api/v1/activities/:slug/draw` | Draw a lottery, reveal a real number or a quiz; outcome, winner and points persist |

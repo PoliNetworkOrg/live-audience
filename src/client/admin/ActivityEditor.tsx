@@ -5,7 +5,7 @@ import { ApiError, api, useApi, useEventStream } from "../api.ts"
 import { Icon } from "../icons.tsx"
 import { Button, Card, Field, Input, Select, Tag } from "../ui.tsx"
 import { PresentationSelect, type PresentationSummary } from "./ActivityList.tsx"
-import { controlStage, PageHeader, useStage } from "./AdminLayout.tsx"
+import { controlStage, PageHeader, resetActivity, useStage } from "./AdminLayout.tsx"
 
 interface Activity {
   id: string
@@ -87,20 +87,20 @@ export function ActivityEditor({ id }: { id: string }) {
             <Field label="Type">
               <Select
                 value={draft.type}
-                onChange={(e) => {
-                  const type = e.target.value
+                onChange={(type) => {
                   // Back to the saved type: get the saved settings back too.
                   const config = type === saved.type ? saved.config : configForType(type, draft.config)
                   setDraft({ ...draft, type, config })
                 }}
-              >
-                {!activityUIs[saved.type] && <option value={saved.type}>{saved.type}</option>}
-                {Object.values(activityUIs).map(({ definition }) => (
-                  <option key={definition.type} value={definition.type} title={definition.description}>
-                    {definition.label}
-                  </option>
-                ))}
-              </Select>
+                options={[
+                  ...(activityUIs[saved.type] ? [] : [{ value: saved.type, label: saved.type }]),
+                  ...Object.values(activityUIs).map(({ definition }) => ({
+                    value: definition.type,
+                    label: definition.label,
+                    description: definition.description,
+                  })),
+                ]}
+              />
             </Field>
             <Field label="Title (admin only)">
               <Input value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} />
@@ -204,9 +204,7 @@ function ResultsPanel({ activity }: { activity: Activity }) {
 
   const [drawError, setDrawError] = useState<string | null>(null)
   const reset = async () => {
-    if (!confirm("Delete every answer and point of this activity?")) return
-    await api(`/api/admin/activities/${activity.id}/reset`, { method: "POST" })
-    setDrawError(null)
+    if (await resetActivity(activity)) setDrawError(null)
   }
   const draw = async () => {
     try {

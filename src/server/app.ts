@@ -97,8 +97,9 @@ export function createApp({ store, session }: { store: Store; session: Middlewar
       const body = await parseBody(c, stagePresentationBody)
       return c.json(describeStage(store, store.setStagePresentation(body.presentation)))
     })
-    .get("/activities", (c) =>
-      c.json(
+    .get("/activities", (c) => {
+      const answers = store.answerCounts()
+      return c.json(
         store.listActivities().map(({ id, slug, type, title, config, presentationId }) => ({
           id,
           slug,
@@ -106,9 +107,10 @@ export function createApp({ store, session }: { store: Store; session: Middlewar
           title,
           config,
           presentation: presentationId ? (store.getPresentation(presentationId)?.slug ?? null) : null,
+          answers: answers.get(id) ?? 0,
         })),
-      ),
-    )
+      )
+    })
     .get("/presentations", (c) =>
       c.json(store.listPresentations().map(({ id, slug, title }) => ({ id, slug, title }))),
     )

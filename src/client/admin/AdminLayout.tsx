@@ -33,6 +33,20 @@ export async function controlPresentation(presentation: string | null) {
   return api<StageInfo>("/api/admin/stage/presentation", { body: { presentation } })
 }
 
+/** Deletes every answer, draw and point of an activity once confirmed; tells whether it did. */
+export async function resetActivity(activity: { id: string; title: string }) {
+  if (!confirm(`Delete every answer and point of "${activity.title}"?`)) return false
+  await api(`/api/admin/activities/${activity.id}/reset`, { method: "POST" })
+  return true
+}
+
+/** The same for every activity of a presentation: a fresh start for its leaderboard. */
+export async function resetPresentation(presentation: { id: string; title: string }) {
+  if (!confirm(`Delete every answer and point of every activity in "${presentation.title}"?`)) return false
+  await api(`/api/admin/presentations/${presentation.id}/reset`, { method: "POST" })
+  return true
+}
+
 export function AdminLayout({ children }: { children: ReactNode }) {
   const me = useMe()
   const user = me.data?.user
@@ -203,6 +217,13 @@ function StageBar({ stage }: { stage: StageInfo | null }) {
               <Icon name="play" /> Open answers
             </Button>
           )}
+          <Button
+            variant="ghost"
+            title="Delete its answers and points"
+            onClick={() => stage.activity && void resetActivity(stage.activity)}
+          >
+            <Icon name="rotate-ccw" /> Reset answers
+          </Button>
           <Button variant="ghost" onClick={() => void controlStage("clear")}>
             Clear stage
           </Button>

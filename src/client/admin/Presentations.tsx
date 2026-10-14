@@ -6,13 +6,15 @@ import { Icon } from "../icons.tsx"
 import { Button, Card, Field, Input, Tag } from "../ui.tsx"
 import {
   ActivityRows,
-  type ActivitySummary,
   type ActivityType,
+  answerCount,
   NewActivity,
+  PresentationResetButton,
   type PresentationSummary,
   slugify,
+  useActivities,
 } from "./ActivityList.tsx"
-import { controlPresentation, PageHeader, useStage } from "./AdminLayout.tsx"
+import { controlPresentation, PageHeader, resetPresentation, useStage } from "./AdminLayout.tsx"
 
 interface Leaderboard {
   leaderboard: { rank: number; name: string; points: number }[]
@@ -20,6 +22,7 @@ interface Leaderboard {
 
 export function PresentationList() {
   const presentations = useApi<PresentationSummary[]>("/api/admin/presentations")
+  const activities = useActivities()
   const stage = useStage()
   const [, navigate] = useLocation()
   const [title, setTitle] = useState("")
@@ -75,20 +78,39 @@ export function PresentationList() {
         {presentations.data?.length === 0 && (
           <p className="px-6 py-5 text-sm text-slate-500">No presentations yet.</p>
         )}
-        {presentations.data?.map((p) => (
-          <Link
-            key={p.id}
-            href={`/presentations/${p.id}`}
-            className="group flex items-center gap-4 px-6 py-4 transition first:rounded-t-[20px] last:rounded-b-[20px] hover:bg-white/60"
-          >
-            <div className="min-w-0 flex-1 space-y-1">
-              <div className="truncate font-headline text-slate-800 group-hover:text-pn">{p.title}</div>
-              <code className="font-mono text-xs text-slate-500">{p.slug}</code>
+        {presentations.data?.map((p) => {
+          const answers = (activities.data ?? [])
+            .filter((a) => a.presentation === p.slug)
+            .reduce((sum, a) => sum + a.answers, 0)
+          return (
+            // The whole row leads to the presentation (the link stretches over it), but for its buttons.
+            <div
+              key={p.id}
+              className="group relative flex items-center gap-4 px-6 py-4 transition first:rounded-t-[20px] last:rounded-b-[20px] hover:bg-white/60"
+            >
+              <div className="min-w-0 flex-1 space-y-1">
+                <Link
+                  href={`/presentations/${p.id}`}
+                  className="block truncate font-headline text-slate-800 group-hover:text-pn after:absolute after:inset-0"
+                >
+                  {p.title}
+                </Link>
+                <div className="flex flex-wrap gap-2 text-xs text-slate-500">
+                  <code className="font-mono">{p.slug}</code>
+                  {answerCount(answers) && <span>· {answerCount(answers)}</span>}
+                </div>
+              </div>
+              {stage?.presentation?.id === p.id && <Tag tone="blue">running</Tag>}
+              <span className="relative">
+                <PresentationResetButton presentation={p} answers={answers} onReset={activities.reload} />
+              </span>
+              <Icon
+                name="arrow-right"
+                className="size-4 text-sky-700 transition group-hover:translate-x-0.5"
+              />
             </div>
-            {stage?.presentation?.id === p.id && <Tag tone="blue">running</Tag>}
-            <Icon name="arrow-right" className="size-4 text-sky-700 transition group-hover:translate-x-0.5" />
-          </Link>
-        ))}
+          )
+        })}
       </Card>
     </div>
   )
@@ -96,7 +118,7 @@ export function PresentationList() {
 
 export function PresentationPage({ id }: { id: string }) {
   const loaded = useApi<PresentationSummary>(`/api/admin/presentations/${id}`)
-  const activities = useApi<ActivitySummary[]>("/api/admin/activities")
+  const activities = useActivities()
   const types = useApi<ActivityType[]>("/api/admin/types")
   const presentations = useApi<PresentationSummary[]>("/api/admin/presentations")
   const stage = useStage()
@@ -132,9 +154,9 @@ export function PresentationPage({ id }: { id: string }) {
     navigate("/presentations")
   }
   const reset = async () => {
-    if (!confirm("Delete every answer and point of every activity in this presentation?")) return
-    await api(`/api/admin/presentations/${id}/reset`, { method: "POST" })
+    if (!(await resetPresentation(presentation))) return
     setResets((n) => n + 1)
+    activities.reload()
   }
 
   return (
@@ -171,6 +193,10 @@ export function PresentationPage({ id }: { id: string }) {
             <ActivityRows
               activities={activities.data?.filter((a) => a.presentation === presentation.slug) ?? []}
               types={types.data ?? []}
+              onReset={() => {
+                setResets((n) => n + 1)
+                activities.reload()
+              }}
             />
             {types.data && presentations.data && (
               <NewActivity

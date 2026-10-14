@@ -111,8 +111,12 @@ describe("a word cloud, driven by a presentation", () => {
     })
     await call("/api/v1/stage/close", { key, method: "POST" })
     expect((await respond("socio", ["felpa"])).status).toBe(409)
+    const answers = async () =>
+      (await (await call("/api/admin/activities", { as: "admin" })).json())[0].answers
+    expect(await answers()).toBe(2)
     await call("/api/v1/activities/gadget-ideas/reset", { key, method: "POST" })
     expect(await readResults()).toEqual({ prompt: "Your ideas?", totalRespondents: 0, words: [] })
+    expect(await answers()).toBe(0)
   })
 })
 
