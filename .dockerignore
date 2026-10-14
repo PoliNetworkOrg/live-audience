@@ -1,5 +1,13 @@
+Dockerfile
+.dockerignore
+.github
+.git
 node_modules
 dist
 data
+docs
+examples
+tests
 .env
-.git
+*.md
+*.log

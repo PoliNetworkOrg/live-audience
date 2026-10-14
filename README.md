@@ -68,13 +68,14 @@ Roles and permissions are read from the ID token (`polinetwork_roles`, `polinetw
 
 ## Deployment
 
+Every push to `main` publishes `ghcr.io/polinetworkorg/live-audience:latest` (amd64 and arm64).
+
 ```sh
-docker build -t live-audience .
 docker run -p 8787:8787 -v live-audience-data:/data \
   -e PUBLIC_URL=https://live.polinetwork.org \
   -e OIDC_ISSUER=https://auth.polinetwork.org/api/auth \
   -e OIDC_CLIENT_ID=... -e OIDC_CLIENT_SECRET=... \
-  live-audience
+  ghcr.io/polinetworkorg/live-audience:latest
 ```
 
 - Run **one replica**: state is a SQLite file and live updates go through an in-process event bus. A single small container easily handles a room full of people.
