@@ -33,10 +33,13 @@ export async function controlPresentation(presentation: string | null) {
   return api<StageInfo>("/api/admin/stage/presentation", { body: { presentation } })
 }
 
+export const activitiesResetEvent = "activities-reset"
+
 /** Deletes every answer, draw and point of an activity once confirmed; tells whether it did. */
 export async function resetActivity(activity: { id: string; title: string }) {
   if (!confirm(`Delete every answer and point of "${activity.title}"?`)) return false
   await api(`/api/admin/activities/${activity.id}/reset`, { method: "POST" })
+  window.dispatchEvent(new Event(activitiesResetEvent))
   return true
 }
 
@@ -44,6 +47,7 @@ export async function resetActivity(activity: { id: string; title: string }) {
 export async function resetPresentation(presentation: { id: string; title: string }) {
   if (!confirm(`Delete every answer and point of every activity in "${presentation.title}"?`)) return false
   await api(`/api/admin/presentations/${presentation.id}/reset`, { method: "POST" })
+  window.dispatchEvent(new Event(activitiesResetEvent))
   return true
 }
 

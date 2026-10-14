@@ -3,7 +3,14 @@ import { Link, useLocation } from "wouter"
 import { api, useApi } from "../api.ts"
 import { Icon } from "../icons.tsx"
 import { Button, Card, Field, Input, Select, Tag } from "../ui.tsx"
-import { controlStage, PageHeader, resetActivity, resetPresentation, useStage } from "./AdminLayout.tsx"
+import {
+  activitiesResetEvent,
+  controlStage,
+  PageHeader,
+  resetActivity,
+  resetPresentation,
+  useStage,
+} from "./AdminLayout.tsx"
 
 export interface ActivitySummary {
   id: string
@@ -28,12 +35,16 @@ export interface PresentationSummary {
   title: string
 }
 
-/** Every activity, reloaded when the stage changes so that answer counts stay roughly current. */
+/** Every activity, reloaded when the stage changes or answers are reset. */
 export function useActivities() {
   const activities = useApi<ActivitySummary[]>("/api/admin/activities")
   const changedAt = useStage()?.changedAt
   const seen = useRef(changedAt)
   const { reload } = activities
+  useEffect(() => {
+    window.addEventListener(activitiesResetEvent, reload)
+    return () => window.removeEventListener(activitiesResetEvent, reload)
+  }, [reload])
   useEffect(() => {
     if (changedAt === seen.current) return
     // The first stage to arrive is the one the list was loaded with.
@@ -92,11 +103,7 @@ export function ActivityList() {
               )}
             </h2>
             {group.presentation && (
-              <PresentationResetButton
-                presentation={group.presentation}
-                answers={group.activities.reduce((sum, a) => sum + a.answers, 0)}
-                onReset={activities.reload}
-              />
+              <PresentationResetButton presentation={group.presentation} onReset={activities.reload} />
             )}
           </div>
           <ActivityRows activities={group.activities} types={types.data ?? []} onReset={activities.reload} />
@@ -109,21 +116,15 @@ export function ActivityList() {
 /** Clears every answer of a presentation's activities, e.g. between two rehearsals. */
 export function PresentationResetButton({
   presentation,
-  answers,
   onReset,
 }: {
   presentation: PresentationSummary
-  /** Answers across its activities: nothing to clear without any. */
-  answers: number
   onReset: () => void
 }) {
-  // Answers may have arrived since the counts loaded while it runs.
-  const running = useStage()?.presentation?.id === presentation.id
   return (
     <Button
       variant="ghost"
-      disabled={answers === 0 && !running}
-      title={answers === 0 ? "No answers yet" : "Delete every answer and point of its activities"}
+      title="Delete every answer, draw and point of its activities"
       onClick={async () => {
         if (await resetPresentation(presentation)) onReset()
       }}
@@ -171,8 +172,6 @@ export function ActivityRows({
             <Button
               variant="ghost"
               className="px-2.5"
-              // Answers may have arrived since the list loaded, so only the on-stage one stays enabled.
-              disabled={a.answers === 0 && !onStage}
               title="Reset answers"
               aria-label={`Reset the answers of ${a.title}`}
               onClick={async () => {

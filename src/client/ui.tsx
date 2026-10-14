@@ -110,13 +110,14 @@ export function Select({
       const anchor = button.current.getBoundingClientRect()
       const gap = 6
       const margin = 8
-      const width = Math.max(menu.current.offsetWidth, anchor.width)
+      const minWidth = Math.min(anchor.width, window.innerWidth - 2 * margin)
+      const width = Math.max(menu.current.offsetWidth, minWidth)
       const below = window.innerHeight - anchor.bottom - gap - margin
       const above = anchor.top - gap - margin
       const up = menu.current.scrollHeight > below && above > below
       setPosition({
         left: Math.max(margin, Math.min(anchor.left, window.innerWidth - width - margin)),
-        minWidth: anchor.width,
+        minWidth,
         maxHeight: Math.min(320, up ? above : below),
         ...(up ? { bottom: window.innerHeight - anchor.top + gap } : { top: anchor.bottom + gap }),
       })
@@ -159,8 +160,11 @@ export function Select({
       event.preventDefault()
       event.stopPropagation()
       setOpen(false)
-    } else if (event.key === "Tab") setOpen(false)
-    else if (event.key.length === 1 && !event.metaKey && !event.ctrlKey) {
+    } else if (event.key === "Tab") {
+      const option = options[active]
+      if (open && option && option.value !== value) onChange(option.value)
+      setOpen(false)
+    } else if (event.key.length === 1 && !event.metaKey && !event.ctrlKey) {
       // Type-ahead: jump to the next option starting with that letter.
       const key = event.key.toLowerCase()
       const order = options.map((_, i) => (active + 1 + i) % options.length)
@@ -202,7 +206,7 @@ export function Select({
             ref={menu}
             id={`${id}-menu`}
             role="listbox"
-            className="glass-solid animate-menu-in fixed z-50 w-max max-w-sm overflow-auto p-1.5"
+            className="glass-solid animate-menu-in fixed z-50 w-max max-w-[min(var(--container-sm),calc(100vw-16px))] overflow-auto p-1.5"
             style={position ?? { visibility: "hidden", top: 0, left: 0 }}
             // Keep the focus on the button.
             onMouseDown={(event) => event.preventDefault()}

@@ -102,7 +102,7 @@ export function PresentationList() {
               </div>
               {stage?.presentation?.id === p.id && <Tag tone="blue">running</Tag>}
               <span className="relative">
-                <PresentationResetButton presentation={p} answers={answers} onReset={activities.reload} />
+                <PresentationResetButton presentation={p} onReset={activities.reload} />
               </span>
               <Icon
                 name="arrow-right"
