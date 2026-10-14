@@ -42,3 +42,35 @@ Validation: typecheck, Biome, all 30 tests and build passed. Both 65-slide decks
 layout checks. Browser checks cover all six games in both decks, phone inputs,
 concealed/revealed media, winners, reloads, manual reveal and reduced motion using
 mocked APIs. Public-service participation was not tested.
+
+## Estensione della cronologia
+
+La slide 51 ora include anche ApeMatricole (inizio giugno, confermato dall’utente)
+e Welcome kit (8 ottobre). Ordine corretto: GDG AI Hack → ApeMatricole → Zurich
+Hackathon → Welcome kit → FastwebAI Hackathon. Attività `events-order` pronta in
+locale; vecchia attività e risposte conservate. Solo questa slide cambia nelle due
+versioni; le altre 64 sono identiche. Verifica: 31 test, typecheck/check/build superati,
+layout dei due deck e browser per cinque carte, vincitore/reload e riordino sul telefono.
+
+Commit suggerito: `feat: include assembly events in the chronology game`
+Titolo PR suggerito: `Include ApeMatricole and Welcome kit in the 2026 chronology`
+Descrizione PR: Expands the chronology game to five events including ApeMatricole
+and Welcome kit. Ordered quizzes accept up to six items while multiple-choice quizzes
+retain their four-option limit. Both decks and a fresh local activity are configured;
+previous answers remain intact. Typecheck, Biome, 31 tests, build, layout and browser
+checks passed. No Git publication or production deployment was performed by the agent.
+
+## Foto misteriosa sostituita dal team lead
+
+La slide 27 ora mostra la foto di Matteo Zenti (`lead-hr.png`) e chiede di
+riconoscere il team lead. Configurata l'attività locale `mystery-lead`, con risposte
+Matteo Zenti / Matteo / Zenti; conservata la vecchia `mystery-photo` con
+le eventuali risposte. Invariati la progressiva nitidezza, il QR, la prima risposta
+corretta e i coriandoli. Le altre 64 slide sono identiche nei due sorgenti.
+
+Commit suggerito: `feat: replace mystery hackathon with team lead quiz`
+Titolo PR: `Replace mystery event photo with a team lead quiz`
+Descrizione PR: Replaces the mystery hackathon game with a gradually revealed photo
+of a team lead already introduced in the deck. Both presentations use a new local
+quiz activity accepting the first name, surname or full name; previous answers are
+preserved. Existing reveal timing, winner and confetti behavior remain unchanged.

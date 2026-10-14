@@ -1,7 +1,7 @@
 # Giochi — specifica tecnica
 
 Riutilizzare memory-quiz per cinque giochi: campi opzionali answerMode (choice/order),
-choices pubbliche, acceptedAnswers private. Config vecchi restano validi e identici
+choices pubbliche (2–4 scelte o 2–6 elementi da ordinare), acceptedAnswers private. Config vecchi restano validi e identici
 per il pubblico. Validare scelta/permutazione sul server; ordinamento con pulsanti
 su/giù utilizzabili da tastiera. Match e vittoria atomica esistenti restano invariati.
 
@@ -21,3 +21,7 @@ Test: scelte/permutazioni invalide rifiutate, retrocompatibilità config testo, 
 privata; stima valida/limiti, vuoto, idempotenza, reset, config bloccata, risultati senza
 identità; browser per sei slide, vittoria/reload e UI scelte/ordine/stima; checker di
 layout per entrambe le presentazioni; typecheck/check/test/build dell'app.
+
+La cronologia ampliata usa `events-order`, con cinque eventi e hackathon. La vecchia
+attività `hackathon-order` conserva le sue eventuali risposte. Nessuna cancellazione
+né reset automatico: il nuovo turno ha un’attività separata.

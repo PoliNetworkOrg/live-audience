@@ -9,10 +9,13 @@ l'ordine e i contenuti delle slide esistenti.
 1. Vero/falso: le passkey richiedono una password ogni volta? Falso.
 2. Intruso: IdentityProvider / Aule PoliNetwork / TicketBuddy / CampusChef. CampusChef
    è l'unico progetto inventato; gli altri sono già comparsi prima della domanda.
-3. Foto misteriosa: la foto `gdg-aihack-squadra.jpg`, progressivamente meno sfocata.
+3. Team lead misterioso: `lead-hr.png`, foto di Matteo Zenti già mostrata
+   nella slide dei team, progressivamente meno sfocata. Risposte accettate: Matteo
+   Zenti, Matteo, Zenti.
 4. Numero reale: quanti lanyard acquistati col 5x1000? 50, dato esatto della slide materiale.
-5. Cronologia: GDG AI Hack (8–10 maggio), Zurich Hackathon (24–25 settembre),
-   FastwebAI Hackathon (22–23 ottobre); sul telefono si riordinano gli eventi.
+5. Cronologia: GDG AI Hack (8–10 maggio), ApeMatricole (inizio giugno, indicato
+   dall’utente), Zurich Hackathon (24–25 settembre), Welcome kit (8 ottobre),
+   FastwebAI Hackathon (22–23 ottobre); sul telefono si riordinano tutti e cinque.
 6. Oggetto coperto: il carrello nella foto `eventi-carrello.jpg`, già mostrata prima.
 
 I quiz premiano la prima risposta corretta ricevuta dal server, chiudendo le risposte.
