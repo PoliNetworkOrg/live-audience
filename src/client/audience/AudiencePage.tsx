@@ -1,12 +1,16 @@
 import { type ReactNode, useState } from "react"
 import { activityUIs } from "../../activities/ui-registry.ts"
 import { api, loginUrl, logout, type Me, useEventStream, useMe } from "../api.ts"
+import { Leaderboard, type LeaderboardView, MyPlace } from "../audience-ui.tsx"
 
 interface AudienceStage {
   status: "open" | "closed"
   changedAt: number
   activity: { id: string; type: string; config: unknown } | null
   myResponse: unknown
+  outcome: { draw: object; youWon: boolean; points: number | null } | null
+  /** The running presentation's points, if one is running. */
+  leaderboard: LeaderboardView | null
 }
 
 export function AudiencePage() {
@@ -17,7 +21,7 @@ export function AudiencePage() {
   if (me.loading && !me.data) content = <Spinner />
   else if (!user) content = <SignIn />
   else if (!user.canParticipate && !user.isAdmin) content = <NotAMember />
-  else content = <Live />
+  else content = <Live me={user} />
 
   return (
     <div className="relative flex min-h-dvh flex-col bg-brand-950 text-white">
@@ -38,7 +42,7 @@ export function AudiencePage() {
   )
 }
 
-function Live() {
+function Live({ me }: { me: Me }) {
   const [stage, setStage] = useState<AudienceStage | null>(null)
   const [error, setError] = useState<string | null>(null)
   const connected = useEventStream("/api/audience/events", {
@@ -53,22 +57,25 @@ function Live() {
   const ui = stage.activity && activityUIs[stage.activity.type]
   if (!stage.activity || !ui) {
     return (
-      <Centered
-        icon={<span className="animate-float block text-6xl">✨</span>}
-        title="Nothing to do right now"
-        text="Keep this page open: questions show up here as soon as the presenter asks them."
-        footer={<ConnectionDot connected={connected} />}
-      />
+      <div className="space-y-8">
+        <Centered
+          icon={<span className="animate-float block text-6xl">{stage.leaderboard ? "🏁" : "✨"}</span>}
+          title={stage.leaderboard ? "Catch your breath" : "Nothing to do right now"}
+          text="Keep this page open: questions show up here as soon as the presenter asks them."
+          footer={<ConnectionDot connected={connected} />}
+        />
+        {stage.leaderboard && <Leaderboard board={stage.leaderboard} />}
+      </div>
     )
   }
 
   const activity = stage.activity
   const submit = async (response: unknown) => {
     try {
-      const saved = await api<{ response: unknown }>("/api/audience/respond", {
+      const saved = await api<{ response: unknown; stage: AudienceStage }>("/api/audience/respond", {
         body: { activityId: activity.id, response },
       })
-      setStage((s) => (s?.activity?.id === activity.id ? { ...s, myResponse: saved.response } : s))
+      setStage(saved.stage)
       setError(null)
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something went wrong")
@@ -84,12 +91,18 @@ function Live() {
       </div>
       <ui.Audience
         config={activity.config}
+        me={me}
+        outcome={stage.outcome}
         response={stage.myResponse}
         open={stage.status === "open"}
         submit={submit}
       />
-      {error && (
+      {/* Once answers are locked the activity itself explains why (too slow, closed…). */}
+      {error && stage.status === "open" && (
         <p className="rounded-xl bg-rose-500/20 px-4 py-3 text-center text-sm text-rose-100">{error}</p>
+      )}
+      {stage.status === "closed" && stage.leaderboard && (
+        <MyPlace board={stage.leaderboard} className="animate-pop-in rounded-2xl bg-white/5 px-4 py-3" />
       )}
     </div>
   )

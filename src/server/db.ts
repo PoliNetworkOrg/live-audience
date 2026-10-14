@@ -36,6 +36,22 @@ const migrations = [
     expires_at INTEGER NOT NULL
   );
   `,
+  `
+  CREATE TABLE presentations (
+    id TEXT PRIMARY KEY,
+    slug TEXT NOT NULL UNIQUE,
+    title TEXT NOT NULL,
+    created_at INTEGER NOT NULL
+  );
+  ALTER TABLE activities ADD COLUMN presentation_id TEXT REFERENCES presentations(id) ON DELETE SET NULL;
+  CREATE TABLE scores (
+    activity_id TEXT NOT NULL REFERENCES activities(id) ON DELETE CASCADE,
+    user_id TEXT NOT NULL,
+    user_name TEXT NOT NULL,
+    points INTEGER NOT NULL,
+    PRIMARY KEY (activity_id, user_id)
+  );
+  `,
 ]
 
 export type Database = DatabaseSync

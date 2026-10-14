@@ -14,16 +14,23 @@ const stageBody = z.object({
   activity: z.string().min(1),
   status: z.enum(["open", "closed"]).default("open"),
 })
+const stagePresentationBody = z.object({ presentation: z.string().min(1).nullable() })
 const createActivityBody = z.object({
   type: z.string(),
   title: z.string().trim().min(1).max(200),
   slug: z.string().trim().min(1).max(80),
+  presentationId: z.string().nullable().optional(),
 })
 const updateActivityBody = z.object({
   type: z.string().optional(),
+  presentationId: z.string().nullable().optional(),
   title: z.string().trim().min(1).max(200).optional(),
   slug: z.string().trim().min(1).max(80).optional(),
   config: z.unknown().optional(),
+})
+const presentationBody = z.object({
+  title: z.string().trim().min(1).max(200),
+  slug: z.string().trim().min(1).max(80),
 })
 const respondBody = z.object({ activityId: z.string(), response: z.unknown() })
 
@@ -85,13 +92,27 @@ export function createApp({ store, session }: { store: Store; session: Middlewar
     .post("/stage/open", (c) => c.json(describeStage(store, store.setStageStatus("open"))))
     .post("/stage/close", (c) => c.json(describeStage(store, store.setStageStatus("closed"))))
     .post("/stage/clear", (c) => c.json(describeStage(store, store.clearStage())))
+    /** Starts a presentation (`{ presentation: "<slug>" }`) or ends it (`{ presentation: null }`). */
+    .post("/stage/presentation", async (c) => {
+      const body = await parseBody(c, stagePresentationBody)
+      return c.json(describeStage(store, store.setStagePresentation(body.presentation)))
+    })
     .get("/activities", (c) =>
       c.json(
-        store
-          .listActivities()
-          .map(({ id, slug, type, title, config }) => ({ id, slug, type, title, config })),
+        store.listActivities().map(({ id, slug, type, title, config, presentationId }) => ({
+          id,
+          slug,
+          type,
+          title,
+          config,
+          presentation: presentationId ? (store.getPresentation(presentationId)?.slug ?? null) : null,
+        })),
       ),
     )
+    .get("/presentations", (c) =>
+      c.json(store.listPresentations().map(({ id, slug, title }) => ({ id, slug, title }))),
+    )
+    .get("/presentations/:id/leaderboard", (c) => c.json(store.getLeaderboard(c.req.param("id"))))
     .get("/activities/:id/results", (c) => c.json(store.getResults(c.req.param("id"))))
     .post("/activities/:id/draw", (c) => c.json(store.drawActivity(c.req.param("id"))))
     .post("/activities/:id/reset", (c) => {
@@ -101,7 +122,8 @@ export function createApp({ store, session }: { store: Store; session: Middlewar
     /**
      * Live feed: `stage` whenever the stage changes, `results` whenever an activity's results
      * change (at most a few times per second). Pass ?activity=<slug> to receive results for
-     * that activity only; otherwise you get results for whatever is on stage.
+     * that activity only; otherwise you get results for whatever is on stage. `leaderboard`
+     * follows the current presentation's points.
      */
     .get("/events", (c) => {
       const only = c.req.query("activity")
@@ -110,9 +132,19 @@ export function createApp({ store, session }: { store: Store; session: Middlewar
         const results = throttleByKey(250, (id) => {
           if (store.getActivity(id)) send("results", store.getResults(id))
         })
+        const leaderboard = throttleByKey(250, (id) => {
+          if (store.getPresentation(id)) send("leaderboard", store.getLeaderboard(id))
+        })
+        let presentationId = store.getStage().presentationId
         const onStage = (stage: Stage) => {
           send("stage", describeStage(store, stage))
           if (!onlyId && stage.activityId) results.call(stage.activityId)
+          if (stage.presentationId && stage.presentationId !== presentationId)
+            leaderboard.call(stage.presentationId)
+          presentationId = stage.presentationId
+        }
+        const onLeaderboard = (id: string) => {
+          if (id === store.getStage().presentationId) leaderboard.call(id)
         }
         const onResults = (id: string) => {
           if (onlyId ? id === onlyId : id === store.getStage().activityId) results.call(id)
@@ -121,12 +153,16 @@ export function createApp({ store, session }: { store: Store; session: Middlewar
         send("stage", describeStage(store, stage))
         const initial = onlyId ?? stage.activityId
         if (initial) send("results", store.getResults(initial))
+        if (stage.presentationId) send("leaderboard", store.getLeaderboard(stage.presentationId))
         store.events.on("stage", onStage)
         store.events.on("results", onResults)
+        store.events.on("leaderboard", onLeaderboard)
         return () => {
           results.cancel()
+          leaderboard.cancel()
           store.events.off("stage", onStage)
           store.events.off("results", onResults)
+          store.events.off("leaderboard", onLeaderboard)
         }
       })
     })
@@ -150,15 +186,24 @@ export function createApp({ store, session }: { store: Store; session: Middlewar
       const user = c.get("user") as SessionUser
       const body = await parseBody(c, respondBody)
       const response = store.respond(body.activityId, user, body.response)
-      return c.json({ response })
+      // The new stage comes along, so a winning answer shows as won without waiting for the event.
+      return c.json({ response, stage: audienceView(store, user) })
     })
     .get("/events", (c) => {
       const user = c.get("user") as SessionUser
       return sse(c, (send) => {
         const onStage = () => send("stage", audienceView(store, user))
+        // Points only matter to phones for the presentation running now.
+        const onLeaderboard = (id: string) => {
+          if (id === store.getStage().presentationId) onStage()
+        }
         onStage()
         store.events.on("stage", onStage)
-        return () => store.events.off("stage", onStage)
+        store.events.on("leaderboard", onLeaderboard)
+        return () => {
+          store.events.off("stage", onStage)
+          store.events.off("leaderboard", onLeaderboard)
+        }
       })
     })
   app.route("/api/audience", audience)
@@ -185,6 +230,21 @@ export function createApp({ store, session }: { store: Store; session: Middlewar
       store.deleteActivity(c.req.param("id"))
       return c.body(null, 204)
     })
+    .post("/presentations", async (c) =>
+      c.json(store.createPresentation(await parseBody(c, presentationBody)), 201),
+    )
+    .get("/presentations/:id", (c) => c.json(store.requirePresentation(c.req.param("id"))))
+    .patch("/presentations/:id", async (c) =>
+      c.json(store.updatePresentation(c.req.param("id"), await parseBody(c, presentationBody.partial()))),
+    )
+    .delete("/presentations/:id", (c) => {
+      store.deletePresentation(c.req.param("id"))
+      return c.body(null, 204)
+    })
+    .post("/presentations/:id/reset", (c) => {
+      store.resetPresentation(c.req.param("id"))
+      return c.json(store.getLeaderboard(c.req.param("id")))
+    })
     .get("/api-key", (c) => c.json({ apiKey: store.getApiKey() }))
     .post("/api-key", (c) => c.json({ apiKey: store.regenerateApiKey() }))
     .route("/", control)
@@ -198,11 +258,15 @@ export function createApp({ store, session }: { store: Store; session: Middlewar
 /** The stage as presentations and the admin see it: ids resolved to slugs. */
 function describeStage(store: Store, stage: Stage) {
   const activity = stage.activityId ? store.getActivity(stage.activityId) : undefined
+  const presentation = stage.presentationId ? store.getPresentation(stage.presentationId) : undefined
   return {
     status: stage.status,
     changedAt: stage.changedAt,
     activity: activity
       ? { id: activity.id, slug: activity.slug, type: activity.type, title: activity.title }
+      : null,
+    presentation: presentation
+      ? { id: presentation.id, slug: presentation.slug, title: presentation.title }
       : null,
   }
 }
@@ -213,5 +277,7 @@ function audienceView(store: Store, user: SessionUser) {
   return {
     ...stage,
     myResponse: stage.activity ? store.getResponse(stage.activity.id, user.id) : null,
+    outcome: stage.activity ? store.getAudienceOutcome(stage.activity.id, user.id) : null,
+    leaderboard: store.getAudienceLeaderboard(user.id),
   }
 }

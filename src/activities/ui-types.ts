@@ -13,15 +13,24 @@ export interface ActivityUI<Config = unknown, Response = unknown, Results = unkn
   /**
    * What an audience member sees while the activity is on stage. `response` is their saved answer
    * (or null). When `open` is false answers are locked: show the saved one, read-only.
+   * `me` is the signed-in person as the IdP knows them: never ask for their name. `outcome` arrives
+   * once a game with a draw is decided (lottery, estimate, quiz): celebrate or commiserate.
    */
   Audience: ComponentType<{
     config: Config
+    me: { name: string }
+    outcome: AudienceOutcome<Results> | null
     response: Response | null
     open: boolean
     submit: (response: Response) => Promise<void>
   }>
   Results?: ComponentType<{ config: Config; results: Results }>
 }
+
+/** The decided draw of types whose results carry one, and whether this person won it. */
+export type AudienceOutcome<Results> = Results extends { draw: infer Draw }
+  ? { draw: NonNullable<Draw>; youWon: boolean; points: number | null }
+  : never
 
 export function defineActivityUI<Config, Response, Results>(
   ui: ActivityUI<Config, Response, Results>,

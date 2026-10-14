@@ -15,13 +15,12 @@ describe("structured prize quizzes", () => {
     })
     expect(memoryQuiz.audienceConfig?.(choice)).toEqual({
       question: "Vero?",
+      scoring: "first",
       answerMode: "choice",
       choices: ["Vero", "Falso"],
     })
-    expect(memoryQuiz.responseSchema(choice).safeParse({ name: "Ada", answer: "Vero" }).success).toBe(true)
-    expect(memoryQuiz.responseSchema(choice).safeParse({ name: "Ada", answer: "Vero Falso" }).success).toBe(
-      false,
-    )
+    expect(memoryQuiz.responseSchema(choice).safeParse({ answer: "Vero" }).success).toBe(true)
+    expect(memoryQuiz.responseSchema(choice).safeParse({ answer: "Vero Falso" }).success).toBe(false)
     const order = memoryQuiz.configSchema.parse({
       question: "Order?",
       answerMode: "order",
@@ -29,13 +28,14 @@ describe("structured prize quizzes", () => {
       acceptedAnswers: ["A → B → C"],
     })
     for (const answer of ["A → B → C", "C → A → B"])
-      expect(memoryQuiz.responseSchema(order).safeParse({ name: "Ada", answer }).success).toBe(true)
+      expect(memoryQuiz.responseSchema(order).safeParse({ answer }).success).toBe(true)
     for (const answer of ["A → A → C", "A → B", "A → B → X"])
-      expect(memoryQuiz.responseSchema(order).safeParse({ name: "Ada", answer }).success).toBe(false)
+      expect(memoryQuiz.responseSchema(order).safeParse({ answer }).success).toBe(false)
     for (const patch of [{ choices: ["A", "a"] }, { acceptedAnswers: ["A → B"] }, { choices: undefined }])
       expect(memoryQuiz.configSchema.safeParse({ ...order, ...patch }).success).toBe(false)
     expect(memoryQuiz.audienceConfig?.({ question: "Text?", acceptedAnswers: ["yes"] })).toEqual({
       question: "Text?",
+      scoring: "first",
     })
   })
 
@@ -48,16 +48,15 @@ describe("structured prize quizzes", () => {
       choices,
       acceptedAnswers: [answer],
     })
-    expect(memoryQuiz.responseSchema(config).safeParse({ name: "Ada", answer }).success).toBe(true)
+    expect(memoryQuiz.responseSchema(config).safeParse({ answer }).success).toBe(true)
     expect(
       memoryQuiz
         .responseSchema(config)
-        .safeParse({ name: "Ada", answer: "GDG AI Hack → Zurich Hackathon → FastwebAI Hackathon" }).success,
+        .safeParse({ answer: "GDG AI Hack → Zurich Hackathon → FastwebAI Hackathon" }).success,
     ).toBe(false)
     expect(
-      memoryQuiz
-        .responseSchema(config)
-        .safeParse({ name: "Ada", answer: answer.replace("ApeMatricole", "Welcome kit") }).success,
+      memoryQuiz.responseSchema(config).safeParse({ answer: answer.replace("ApeMatricole", "Welcome kit") })
+        .success,
     ).toBe(false)
     expect(
       memoryQuiz.configSchema.safeParse({ ...config, answerMode: "choice", acceptedAnswers: ["Welcome kit"] })
@@ -73,7 +72,7 @@ describe("structured prize quizzes", () => {
       })
       store.updateActivity(activity.id, { config })
       store.setStage(activity.id, "open")
-      store.respond(activity.id, { id: "ada", name: "Private" }, { name: "Ada", answer })
+      store.respond(activity.id, { id: "ada", name: "Ada" }, { answer })
       expect(store.getStage().status).toBe("closed")
       expect(store.getResults(activity.id).results.draw.winner).toEqual({ name: "Ada", answer })
     } finally {
@@ -95,14 +94,14 @@ describe("structured prize quizzes", () => {
         },
       })
       store.setStage(activity.id, "open")
-      const user = { id: "private-account", name: "Private account name" }
-      store.respond(activity.id, user, { name: "Ada", answer: "C → B → A" })
+      const user = { id: "private-account", name: "Ada" }
+      store.respond(activity.id, user, { answer: "C → B → A" })
       expect(store.getStage().status).toBe("open")
-      store.respond(activity.id, user, { name: "Ada", answer: "A → B → C" })
+      store.respond(activity.id, user, { answer: "A → B → C" })
       expect(store.getStage().status).toBe("closed")
       expect(store.getResults(activity.id).results.draw.winner.name).toBe("Ada")
       expect(() =>
-        store.respond(activity.id, { id: "later", name: "Later" }, { name: "Later", answer: "A → B → C" }),
+        store.respond(activity.id, { id: "later", name: "Later" }, { answer: "A → B → C" }),
       ).toThrow()
     } finally {
       db.close()
@@ -124,14 +123,10 @@ describe("guess a real number", () => {
       store.updateActivity(activity.id, { config })
       expect(numberEstimate.audienceConfig?.(config)).toEqual({ prompt: config.prompt })
       for (const number of [-1, 1.5, 1_000_001, Infinity, "50"])
-        expect(numberEstimate.responseSchema(config).safeParse({ name: "Ada", number }).success).toBe(false)
+        expect(numberEstimate.responseSchema(config).safeParse({ number }).success).toBe(false)
       store.setStage(activity.id, "open")
       for (const [index, number] of [48, 52, 80].entries())
-        store.respond(
-          activity.id,
-          { id: `private-${index}`, name: "Private account name" },
-          { name: `Guest ${index}`, number },
-        )
+        store.respond(activity.id, { id: `private-${index}`, name: `Guest ${index}` }, { number })
       expect(() => store.updateActivity(activity.id, { config: { ...config, target: 80 } })).toThrow("Reset")
       expect(JSON.stringify(store.getResults(activity.id))).not.toContain("Guest")
       expect(JSON.stringify(store.getResults(activity.id))).not.toContain('"target"')
@@ -149,7 +144,12 @@ describe("guess a real number", () => {
       expect(draw.results.draw).toMatchObject({ number: 50, distance: 2, tied: 2 })
       expect([48, 52]).toContain(draw.results.draw.winner.number)
       expect(JSON.stringify(draw)).not.toContain("private-")
-      expect(JSON.stringify(draw)).not.toContain("Private account name")
+      // The winner is announced under the name from their account.
+      const winnerIndex = [48, 52].indexOf(draw.results.draw.winner.number)
+      expect(draw.results.draw.winner.name).toBe(`Guest ${winnerIndex}`)
+      expect(JSON.stringify(draw)).not.toContain("winnerUserId")
+      expect(store.getAudienceOutcome(activity.id, `private-${winnerIndex}`)?.youWon).toBe(true)
+      expect(store.getAudienceOutcome(activity.id, `private-${1 - winnerIndex}`)?.youWon).toBe(false)
       expect(draw.results.entries).toBeUndefined()
       expect(store.getStage().status).toBe("closed")
       expect(store.drawActivity(activity.id)).toEqual(draw)

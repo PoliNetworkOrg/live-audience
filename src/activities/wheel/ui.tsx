@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react"
+import { useState } from "react"
+import { Saved, ShownAs, Verdict } from "../../client/audience-ui.tsx"
 import { Field, Textarea } from "../../client/ui.tsx"
 import { defineActivityUI } from "../ui-types.ts"
 import { type WheelConfig, type WheelResponse, type WheelResults, wheel } from "./definition.ts"
@@ -13,26 +14,25 @@ function Editor({ config, onChange }: { config: WheelConfig; onChange: (config: 
 
 function Audience({
   config,
+  me,
   response,
   open,
   submit,
 }: {
   config: WheelConfig
+  me: { name: string }
   response: WheelResponse | null
   open: boolean
   submit: (response: WheelResponse) => Promise<void>
 }) {
-  const [name, setName] = useState(response?.name ?? "")
   const [saving, setSaving] = useState(false)
-  useEffect(() => setName(response?.name ?? ""), [response])
-  const parsed = wheel.responseSchema(config).safeParse({ name })
-  const send = async () => {
-    if (!open || saving || !parsed.success) return
+  const join = async () => {
+    if (!open || saving || response) return
     setSaving(true)
     try {
-      await submit(parsed.data)
+      await submit({})
     } catch {
-      /* The audience page displays submission errors; keep the name for retry. */
+      /* The audience page displays submission errors. */
     } finally {
       setSaving(false)
     }
@@ -40,36 +40,32 @@ function Audience({
   return (
     <div className="space-y-5">
       <h2 className="text-2xl font-semibold text-white">{config.prompt}</h2>
-      <label className="block space-y-2">
-        <span className="text-sm text-sky-100">Your name (shown on the presentation)</span>
-        <input
-          value={name}
-          onChange={(event) => setName(event.target.value)}
-          maxLength={80}
-          autoComplete="name"
-          disabled={!open || saving}
-          className="w-full rounded-2xl border border-white/20 bg-white/10 px-5 py-4 text-lg text-white outline-none focus:border-sky-300 disabled:opacity-60"
-        />
-      </label>
-      {open && (
+      <ShownAs name={me.name} />
+      {open && !response && (
         <button
           type="button"
-          disabled={!parsed.success || parsed.data.name === response?.name || saving}
-          onClick={() => void send()}
+          disabled={saving}
+          onClick={() => void join()}
           className="w-full rounded-2xl bg-white px-5 py-4 text-lg font-semibold text-brand-950 disabled:opacity-40"
         >
-          {saving ? "Sending…" : response ? "Update name" : "Join the wheel"}
+          {saving ? "Joining…" : "Join the wheel"}
         </button>
       )}
-      <p className="text-center text-sm text-sky-100/70">
-        {!open
-          ? response
-            ? "Entries are closed. You're on the wheel!"
-            : "Entries are closed."
-          : response
-            ? "You're on the wheel ✓ You can update your name until entries close."
-            : "One entry per person."}
-      </p>
+      {!open ? (
+        response ? (
+          <Verdict tone="info" emoji="🤞" title="You're on the wheel!">
+            Fingers crossed: watch the screen while it spins.
+          </Verdict>
+        ) : (
+          <Verdict tone="info" emoji="🐢" title="Too late!">
+            Entries are closed: the wheel spins without you this time.
+          </Verdict>
+        )
+      ) : response ? (
+        <Saved id={response}>🎡 You're in! Good luck!</Saved>
+      ) : (
+        <p className="text-center text-sm text-sky-100/70">One entry per person.</p>
+      )}
     </div>
   )
 }

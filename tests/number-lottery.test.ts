@@ -18,19 +18,15 @@ function setup() {
   const activity = store.createActivity({ type: "number-lottery", title: "Gadget", slug: "gadget-number" })
   store.setStage(activity.id, "open")
   const join = (id: string, number: number, name = id) =>
-    store.respond(activity.id, { id, name: "Private account name" }, { name, number })
+    store.respond(activity.id, { id, name }, { name: "Typed name", number })
   return { db, store, activity, join }
 }
 
 describe("number lottery", () => {
-  it("accepts only integers from 0 to 100 and normalizes display names", () => {
+  it("accepts only integers from 0 to 100 and no typed name", () => {
     const schema = numberLottery.responseSchema(numberLottery.defaultConfig())
-    for (const number of [0, 100])
-      expect(schema.parse({ name: "  Ada   B ", number })).toEqual({ name: "Ada B", number })
-    for (const number of [-1, 101, 1.5, "50", NaN])
-      expect(schema.safeParse({ name: "Ada", number }).success).toBe(false)
-    expect(schema.safeParse({ name: " ", number: 50 }).success).toBe(false)
-    expect(schema.safeParse({ name: "x".repeat(81), number: 50 }).success).toBe(false)
+    for (const number of [0, 100]) expect(schema.parse({ name: "Ada", number })).toEqual({ number })
+    for (const number of [-1, 101, 1.5, "50", NaN]) expect(schema.safeParse({ number }).success).toBe(false)
   })
 
   it("calculates both-sided ties, exact guesses and edge distances", () => {
@@ -72,7 +68,15 @@ describe("number lottery", () => {
       expect(store.drawNumber(activity.id)).toEqual(result)
       expect(new Store(db).drawNumber(activity.id)).toEqual(result)
       expect(randomInt).toHaveBeenCalledTimes(2)
-      expect(JSON.stringify(result)).not.toContain("Private account name")
+      expect(JSON.stringify(result)).not.toContain("Typed name")
+      expect(JSON.stringify(result)).not.toContain("winnerUserId")
+      // Only the drawn winner hears they won, even with the same name and distance as someone else.
+      expect(store.getAudienceOutcome(activity.id, "b")).toMatchObject({
+        draw: result.results.draw,
+        youWon: true,
+      })
+      expect(store.getAudienceOutcome(activity.id, "a")?.youWon).toBe(false)
+      expect(store.getAudienceOutcome(activity.id, "nobody")?.youWon).toBe(false)
       expect(JSON.stringify(result)).not.toContain("userId")
       store.resetResponses(activity.id)
       expect(store.getResults(activity.id).results).toMatchObject({ totalParticipants: 0, draw: null })

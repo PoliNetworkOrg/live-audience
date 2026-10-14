@@ -49,3 +49,74 @@
 .animate-pop-in {
   animation: pop-in 0.35s cubic-bezier(0.2, 0.9, 0.3, 1.2) both;
 }
+
+@keyframes confetti {
+  from {
+    transform: translate3d(0, 0, 0) rotate(0);
+    opacity: 1;
+  }
+  to {
+    transform: translate3d(var(--drift), 105vh, 0) rotate(var(--spin));
+    opacity: 0.6;
+  }
+}
+
+@keyframes tada {
+  0% {
+    transform: scale(0.4) rotate(-20deg);
+  }
+  45% {
+    transform: scale(1.25) rotate(8deg);
+  }
+  65% {
+    transform: scale(0.95) rotate(-6deg);
+  }
+  80% {
+    transform: scale(1.05) rotate(3deg);
+  }
+  100% {
+    transform: none;
+  }
+}
+
+@keyframes wobble {
+  0%,
+  100% {
+    transform: none;
+  }
+  20% {
+    transform: translateX(-10px) rotate(-8deg);
+  }
+  40% {
+    transform: translateX(8px) rotate(6deg);
+  }
+  60% {
+    transform: translateX(-5px) rotate(-3deg);
+  }
+  80% {
+    transform: translateX(3px) rotate(1deg);
+  }
+}
+
+.animate-confetti {
+  animation: confetti 3s cubic-bezier(0.3, 0.6, 0.6, 1) both;
+}
+
+.animate-tada {
+  animation: tada 0.9s cubic-bezier(0.2, 0.9, 0.3, 1.2) both;
+}
+
+.animate-wobble {
+  animation: wobble 0.8s ease-in-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-confetti {
+    display: none;
+  }
+  .animate-tada,
+  .animate-wobble,
+  .animate-float {
+    animation: none;
+  }
+}

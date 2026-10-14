@@ -68,7 +68,7 @@ export function ApiPage() {
           <tbody className="divide-y divide-slate-100 [&_td]:py-1.5 [&_td:first-child]:pr-4 [&_td:first-child]:font-mono [&_td:first-child]:whitespace-nowrap [&_td:first-child]:text-xs">
             <tr>
               <td>GET /api/v1/stage</td>
-              <td>What is on stage: {"{ status, activity }"}</td>
+              <td>What is on stage: {"{ status, activity, presentation }"}</td>
             </tr>
             <tr>
               <td>POST /api/v1/stage</td>
@@ -90,6 +90,13 @@ export function ApiPage() {
               <td>Nothing on stage (idle screen)</td>
             </tr>
             <tr>
+              <td>POST /api/v1/stage/presentation</td>
+              <td>
+                Body <code>{'{ "presentation": "<slug>" | null }'}</code>: start or end a presentation.
+                Putting one of its activities on stage starts it too
+              </td>
+            </tr>
+            <tr>
               <td>GET /api/v1/activities</td>
               <td>All activities with their config</td>
             </tr>
@@ -104,15 +111,26 @@ export function ApiPage() {
             <tr>
               <td>POST /api/v1/activities/:slug/draw</td>
               <td>
-                Draw a number lottery, reveal a real number or a memory quiz; repeats return the same saved
-                outcome
+                Draw a number lottery, reveal a real number or a memory quiz, and score it; repeats return the
+                same saved outcome
+              </td>
+            </tr>
+            <tr>
+              <td>GET /api/v1/presentations</td>
+              <td>All presentations</td>
+            </tr>
+            <tr>
+              <td>GET /api/v1/presentations/:slug/leaderboard</td>
+              <td>
+                <code>{"{ id, slug, title, leaderboard: [{ rank, name, points }] }"}</code>, best first
               </td>
             </tr>
             <tr>
               <td>GET /api/v1/events</td>
               <td>
                 Server-Sent Events: <code>stage</code> on every change, <code>results</code> for what is on
-                stage (or for <code>?activity=&lt;slug&gt;</code> only)
+                stage (or for <code>?activity=&lt;slug&gt;</code> only), <code>leaderboard</code> for the
+                running presentation
               </td>
             </tr>
           </tbody>

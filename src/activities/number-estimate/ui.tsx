@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react"
+import { Saved, ShownAs, useOneOf, Verdict } from "../../client/audience-ui.tsx"
 import { Field, Textarea } from "../../client/ui.tsx"
 import { defineActivityUI } from "../ui-types.ts"
 import {
   type NumberEstimateConfig,
+  type NumberEstimateDraw,
   type NumberEstimateResponse,
   type NumberEstimateResults,
   numberEstimate,
@@ -43,27 +45,28 @@ function Editor({
 
 function Audience({
   config,
+  me,
+  outcome,
   response,
   open,
   submit,
 }: {
   config: NumberEstimateConfig
+  me: { name: string }
+  outcome: { draw: NumberEstimateDraw; youWon: boolean; points: number | null } | null
   response: NumberEstimateResponse | null
   open: boolean
   submit: (response: NumberEstimateResponse) => Promise<void>
 }) {
-  const [name, setName] = useState(response?.name ?? "")
   const [number, setNumber] = useState(response ? String(response.number) : "")
   const [saving, setSaving] = useState(false)
   useEffect(() => {
-    setName(response?.name ?? "")
     setNumber(response ? String(response.number) : "")
   }, [response])
   const parsed = numberEstimate
     .responseSchema(config)
-    .safeParse({ name, number: number.trim() ? Number(number) : NaN })
-  const dirty =
-    parsed.success && (parsed.data.name !== response?.name || parsed.data.number !== response?.number)
+    .safeParse({ number: number.trim() ? Number(number) : NaN })
+  const dirty = parsed.success && parsed.data.number !== response?.number
   const send = async () => {
     if (!open || saving || !parsed.success) return
     setSaving(true)
@@ -80,17 +83,7 @@ function Audience({
   return (
     <div className="space-y-5">
       <h2 className="text-2xl font-semibold text-white">{config.prompt}</h2>
-      <label className="block space-y-2">
-        <span className="text-sm text-sky-100">Your name (shown on the presentation)</span>
-        <input
-          value={name}
-          onChange={(event) => setName(event.target.value)}
-          maxLength={80}
-          autoComplete="name"
-          disabled={!open || saving}
-          className={inputClass}
-        />
-      </label>
+      <ShownAs name={me.name} />
       <label className="block space-y-2">
         <span className="text-sm text-sky-100">Your guess, from 0 to 1000000</span>
         <input
@@ -118,14 +111,80 @@ function Audience({
       <p className="text-sm text-sky-100/80">
         Closest guess wins. If several people are equally close, one winner is drawn at random among them.
       </p>
-      <p className="text-center text-sm text-sky-100/70">
-        {!open
-          ? "Guesses are closed."
-          : response && !dirty
-            ? "Guess saved ✓ You can change it until the reveal."
-            : "One guess per person."}
-      </p>
+      {outcome ? (
+        <EstimateVerdict {...outcome} mine={response?.number} />
+      ) : !open ? (
+        response ? (
+          <Verdict tone="info" emoji="🥁" title="Guesses locked">
+            You guessed <b>{format(response.number)}</b>. Waiting for the big reveal…
+          </Verdict>
+        ) : (
+          <Verdict tone="info" emoji="🔒" title="Guesses are closed">
+            No guess from you this time.
+          </Verdict>
+        )
+      ) : response && !dirty ? (
+        <Saved id={response}>Guess saved ✓ You can change it until the reveal.</Saved>
+      ) : (
+        <p className="text-center text-sm text-sky-100/70">One guess per person.</p>
+      )}
     </div>
+  )
+}
+
+const format = (number: number) => number.toLocaleString("en")
+
+function EstimateVerdict({
+  draw,
+  youWon,
+  points,
+  mine,
+}: {
+  draw: NumberEstimateDraw
+  youWon: boolean
+  points: number | null
+  mine: number | undefined
+}) {
+  const cheer = useOneOf(["You won!", "Best guess in the room!", "Human calculator!"])
+  const real = <b>{format(draw.number)}</b>
+  const winner = draw.winner
+  if (youWon) {
+    return draw.distance === 0 ? (
+      <Verdict points={points} tone="win" emoji="🎯" title="Spot on!">
+        The real number was exactly {real}. You win!
+      </Verdict>
+    ) : (
+      <Verdict points={points} tone="win" emoji="🏆" title={cheer}>
+        The real number was {real}: your {format(mine ?? 0)} was the closest guess.
+      </Verdict>
+    )
+  }
+  const winnerLine = winner
+    ? `${winner.name} wins with ${format(winner.number)}.`
+    : "Nobody guessed this time."
+  if (mine === undefined) {
+    return (
+      <Verdict points={points} tone="info" emoji="🔢" title={`The real number was ${format(draw.number)}`}>
+        {winnerLine}
+      </Verdict>
+    )
+  }
+  const off = Math.abs(mine - draw.number)
+  if (off === draw.distance) {
+    return (
+      <Verdict points={points} tone="lose" emoji="🎲" title="So close!">
+        You tied for the closest guess with {draw.tied - 1 === 1 ? "someone else" : `${draw.tied - 1} others`}
+        , but the random draw picked {winner?.name}.
+      </Verdict>
+    )
+  }
+  const ratio = off / Math.max(draw.number, 1)
+  const [emoji, title] =
+    ratio <= 0.1 ? ["😩", "Argh, so close!"] : ratio <= 0.5 ? ["🤏", "Not bad!"] : ["🙈", "Way off!"]
+  return (
+    <Verdict points={points} tone="lose" emoji={emoji} title={title}>
+      The real number was {real}, you guessed {format(mine)}. {winnerLine}
+    </Verdict>
   )
 }
 

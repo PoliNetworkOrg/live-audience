@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react"
+import { Saved, ShownAs, useOneOf, Verdict } from "../../client/audience-ui.tsx"
 import { Field, Textarea } from "../../client/ui.tsx"
 import { defineActivityUI } from "../ui-types.ts"
 import {
   type NumberLotteryConfig,
+  type NumberLotteryDraw,
   type NumberLotteryResponse,
   type NumberLotteryResults,
   numberLottery,
@@ -29,27 +31,28 @@ function Editor({
 
 function Audience({
   config,
+  me,
+  outcome,
   response,
   open,
   submit,
 }: {
   config: NumberLotteryConfig
+  me: { name: string }
+  outcome: { draw: NumberLotteryDraw; youWon: boolean; points: number | null } | null
   response: NumberLotteryResponse | null
   open: boolean
   submit: (response: NumberLotteryResponse) => Promise<void>
 }) {
-  const [name, setName] = useState(response?.name ?? "")
   const [number, setNumber] = useState(response ? String(response.number) : "")
   const [saving, setSaving] = useState(false)
   useEffect(() => {
-    setName(response?.name ?? "")
     setNumber(response ? String(response.number) : "")
   }, [response])
   const parsed = numberLottery
     .responseSchema(config)
-    .safeParse({ name, number: number.trim() ? Number(number) : NaN })
-  const dirty =
-    parsed.success && (parsed.data.name !== response?.name || parsed.data.number !== response?.number)
+    .safeParse({ number: number.trim() ? Number(number) : NaN })
+  const dirty = parsed.success && parsed.data.number !== response?.number
   const send = async () => {
     if (!open || saving || !parsed.success) return
     setSaving(true)
@@ -66,17 +69,7 @@ function Audience({
   return (
     <div className="space-y-5">
       <h2 className="text-2xl font-semibold text-white">{config.prompt}</h2>
-      <label className="block space-y-2">
-        <span className="text-sm text-sky-100">Your name (shown on the presentation)</span>
-        <input
-          value={name}
-          onChange={(event) => setName(event.target.value)}
-          maxLength={80}
-          autoComplete="name"
-          disabled={!open || saving}
-          className={inputClass}
-        />
-      </label>
+      <ShownAs name={me.name} />
       <label className="block space-y-2">
         <span className="text-sm text-sky-100">Your number, from 0 to 100</span>
         <input
@@ -104,14 +97,72 @@ function Audience({
       <p className="text-sm text-sky-100/80">
         Closest guess wins. If several people are equally close, one winner is drawn at random among them.
       </p>
-      <p className="text-center text-sm text-sky-100/70">
-        {!open
-          ? "Guesses are closed."
-          : response && !dirty
-            ? "Guess saved ✓ You can change it until the draw."
-            : "One guess per person."}
-      </p>
+      {outcome ? (
+        <LotteryVerdict {...outcome} mine={response?.number} />
+      ) : !open ? (
+        response ? (
+          <Verdict tone="info" emoji="🥁" title="Guesses locked">
+            Your number is <b>{response.number}</b>. Drumroll for the draw…
+          </Verdict>
+        ) : (
+          <Verdict tone="info" emoji="🔒" title="Guesses are closed">
+            You didn't pick a number this time.
+          </Verdict>
+        )
+      ) : response && !dirty ? (
+        <Saved id={response}>Guess saved ✓ You can change it until the draw.</Saved>
+      ) : (
+        <p className="text-center text-sm text-sky-100/70">One guess per person.</p>
+      )}
     </div>
+  )
+}
+
+function LotteryVerdict({
+  draw,
+  youWon,
+  points,
+  mine,
+}: {
+  draw: NumberLotteryDraw
+  youWon: boolean
+  points: number | null
+  mine: number | undefined
+}) {
+  const cheer = useOneOf(["You won!", "Winner winner!", "Jackpot!"])
+  const winner = draw.winners[0]
+  if (youWon) {
+    return (
+      <Verdict points={points} tone="win" emoji="🏆" title={cheer}>
+        The number was <b>{draw.number}</b>
+        {draw.distance === 0 ? ": you nailed it exactly!" : `, and your ${mine} was the closest.`}
+      </Verdict>
+    )
+  }
+  if (mine === undefined) {
+    return (
+      <Verdict points={points} tone="info" emoji="🎯" title={`The number was ${draw.number}`}>
+        {winner?.name} wins with {winner?.number}. Join in next time!
+      </Verdict>
+    )
+  }
+  const distance = Math.abs(mine - draw.number)
+  if (distance === draw.distance) {
+    return (
+      <Verdict points={points} tone="lose" emoji="🎲" title="So close!">
+        You tied for the closest guess, but the random draw picked {winner?.name}.
+      </Verdict>
+    )
+  }
+  return (
+    <Verdict
+      tone="lose"
+      emoji={distance <= 5 ? "😩" : "🙈"}
+      title={distance <= 5 ? "Argh, so close!" : "Not this time"}
+    >
+      The number was <b>{draw.number}</b> and you were {distance} away. {winner?.name} won with{" "}
+      {winner?.number}.
+    </Verdict>
   )
 }
 
