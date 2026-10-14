@@ -29,8 +29,9 @@ export function AudiencePage() {
   return (
     <div className="relative flex min-h-dvh flex-col text-slate-950">
       <Backdrop />
-      <header className="relative z-10 flex items-center justify-between gap-3 px-5 pt-[max(1.25rem,env(safe-area-inset-top))] pb-3">
-        <Wordmark suffix="Live" />
+      <header className="relative z-10 flex items-center justify-between gap-3 px-4 pt-[max(1.25rem,env(safe-area-inset-top))] pb-3 sm:px-5">
+        {/* On the narrowest phones "Live" makes room for the menu. */}
+        <Wordmark suffix="Live" className="shrink-0 max-[22.5rem]:[&>.kicker]:hidden" />
         {user && <UserMenu user={user} />}
       </header>
       <main className="relative z-10 mx-auto flex w-full max-w-lg flex-1 flex-col justify-center px-5 pt-6 pb-[max(2rem,env(safe-area-inset-bottom))]">
@@ -153,28 +154,37 @@ function NotAMember() {
   )
 }
 
+/** Fits a phone next to the wordmark: the name gives way first, and admins only see their picture there. */
 function UserMenu({ user }: { user: Me }) {
   return (
-    <div className="flex items-center gap-2.5 text-sm">
+    <div className="flex min-w-0 items-center gap-1.5 text-sm sm:gap-2.5">
       {user.isAdmin && (
-        <a href="/admin" className="rounded-full px-3 py-1.5 font-medium text-pn hover:bg-white/70">
+        <a
+          href="/admin"
+          className="shrink-0 rounded-full px-2 py-1.5 font-medium text-pn hover:bg-white/70 sm:px-3"
+        >
           Admin
         </a>
       )}
       <button
         type="button"
         onClick={() => void logout()}
-        className="glass flex items-center gap-2 rounded-full! py-1 pr-3 pl-1 text-slate-700 hover:bg-white/80"
-        title="Sign out"
+        className={cx(
+          "glass flex min-w-9 items-center gap-2 rounded-full! py-1 pl-1 text-slate-700 hover:bg-white/80",
+          user.isAdmin ? "pr-1 sm:pr-3" : "pr-3",
+        )}
+        title={`Signed in as ${user.name}. Sign out`}
       >
         {user.picture ? (
-          <img src={user.picture} alt="" className="size-7 rounded-full" />
+          <img src={user.picture} alt="" className="size-7 shrink-0 rounded-full" />
         ) : (
-          <span className="flex size-7 items-center justify-center rounded-full bg-pn font-display text-xs font-semibold text-white">
+          <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-pn font-display text-xs font-semibold text-white">
             {user.name.slice(0, 1)}
           </span>
         )}
-        <span className="max-w-32 truncate font-medium">{user.name.split(" ")[0]}</span>
+        <span className={cx("max-w-32 min-w-0 truncate font-medium", user.isAdmin && "max-sm:hidden")}>
+          {user.name.split(" ")[0]}
+        </span>
       </button>
     </div>
   )
