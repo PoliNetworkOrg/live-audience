@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { Field, Textarea } from "../../client/ui.tsx"
+import { Field, Select, Textarea } from "../../client/ui.tsx"
 import { defineActivityUI } from "../ui-types.ts"
 import {
   type MemoryQuizConfig,
@@ -24,25 +24,28 @@ function Editor({
         />
       </Field>
       <Field label="Answer format">
-        <select
-          className="rounded border p-2"
+        <Select
+          className="w-auto"
           value={config.answerMode ?? "text"}
           onChange={(event) => {
             const mode = event.target.value
             onChange({
               ...config,
               answerMode: mode === "text" ? undefined : (mode as "choice" | "order"),
-              choices: mode === "text" ? undefined : (config.choices ?? ["", ""]),
+              choices: mode === "text" ? undefined : (config.choices ?? []),
             })
           }}
         >
           <option value="text">Free text</option>
           <option value="choice">Choose an option</option>
           <option value="order">Put items in order</option>
-        </select>
+        </Select>
       </Field>
       {config.answerMode && (
-        <Field label="Options / items (one per line; 2–4 choices, 2–6 ordered items)">
+        <Field
+          label="Options / items (one per line; 2–4 choices, 2–6 ordered items)"
+          hint="Blank lines are ignored."
+        >
           <Textarea
             value={(config.choices ?? []).join("\n")}
             onChange={(event) => onChange({ ...config, choices: event.target.value.split("\n") })}
@@ -51,7 +54,7 @@ function Editor({
       )}
       <Field
         label="Accepted answers (hidden from participants)"
-        hint="One exact answer per line. For ordering, separate the items with →. Case, whitespace and trailing . ! ? are ignored."
+        hint="One exact answer per line; blank lines are ignored. For ordering, separate the items with →. Case, whitespace and trailing . ! ? are ignored."
       >
         <Textarea
           value={config.acceptedAnswers.join("\n")}

@@ -20,6 +20,7 @@ const createActivityBody = z.object({
   slug: z.string().trim().min(1).max(80),
 })
 const updateActivityBody = z.object({
+  type: z.string().optional(),
   title: z.string().trim().min(1).max(200).optional(),
   slug: z.string().trim().min(1).max(80).optional(),
   config: z.unknown().optional(),

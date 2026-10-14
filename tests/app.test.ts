@@ -1,5 +1,6 @@
 import type { MiddlewareHandler } from "hono"
 import { beforeEach, describe, expect, it } from "vitest"
+import { wheel } from "../src/activities/wheel/definition.ts"
 import { createApp } from "../src/server/app.ts"
 import type { AuthVariables, SessionUser } from "../src/server/auth.ts"
 import { openDatabase } from "../src/server/db.ts"
@@ -229,6 +230,65 @@ describe("a poll, driven by a presentation", () => {
     })
     expect(res.status).toBe(400)
     expect((await res.json()).details).toBeInstanceOf(Array)
+  })
+
+  it("drops poll options left blank", async () => {
+    await call("/api/admin/activities", { as: "admin", body: { type: "poll", title: "X", slug: "x" } })
+    const res = await call("/api/admin/activities/x", {
+      as: "admin",
+      method: "PATCH",
+      body: {
+        config: {
+          question: "Q",
+          options: [
+            { id: "a", label: "Yes" },
+            { id: "b", label: "  " },
+            { id: "c", label: " No " },
+          ],
+          maxChoices: 1,
+        },
+      },
+    })
+    expect(res.status).toBe(200)
+    expect((await res.json()).config.options).toEqual([
+      { id: "a", label: "Yes" },
+      { id: "c", label: "No" },
+    ])
+  })
+
+  it("changes the type of an activity without answers, off stage", async () => {
+    const { id } = await createPoll()
+    const key = store.getApiKey()
+    const patch = (body: unknown) =>
+      call(`/api/admin/activities/${id}`, { as: "admin", method: "PATCH", body })
+
+    expect((await patch({ type: "nope" })).status).toBe(400)
+    expect((await patch({ type: "word-cloud", config: { question: "Q" } })).status).toBe(400)
+
+    await call("/api/v1/stage", { key, body: { activity: "dinner" } })
+    expect((await patch({ type: "wheel" })).status).toBe(409) // on stage
+    await call("/api/audience/respond", {
+      as: "socio",
+      body: { activityId: id, response: { choices: ["a"] } },
+    })
+    await call("/api/v1/stage/clear", { key, method: "POST" })
+    expect((await patch({ type: "wheel" })).status).toBe(409) // has answers
+    expect(store.getActivity(id)).toMatchObject({ type: "poll" })
+
+    await call("/api/v1/activities/dinner/reset", { key, method: "POST" })
+    const changed = await patch({ type: "word-cloud", config: { prompt: "Ideas?", maxWords: 2 } })
+    expect(changed.status).toBe(200)
+    expect(await changed.json()).toMatchObject({
+      type: "word-cloud",
+      config: { prompt: "Ideas?", maxWords: 2 },
+    })
+    expect(store.getResults("dinner")).toMatchObject({ type: "word-cloud", results: { words: [] } })
+
+    // Without a config the new type starts from its default one.
+    expect(await (await patch({ type: "wheel" })).json()).toMatchObject({
+      type: "wheel",
+      config: wheel.defaultConfig(),
+    })
   })
 
   it("refuses duplicate or malformed slugs", async () => {

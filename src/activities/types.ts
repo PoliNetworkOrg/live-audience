@@ -1,4 +1,4 @@
-import type { z } from "zod"
+import { z } from "zod"
 
 /**
  * The server-side half of an activity type: plain data and pure functions, no React.
@@ -48,3 +48,18 @@ export function defineActivity<Config, Response, Results>(
 
 // biome-ignore lint/suspicious/noExplicitAny: the registry holds heterogeneous definitions
 export type AnyActivityDefinition = ActivityDefinition<any, any, any>
+
+/**
+ * Lets admins leave blank rows in lists typed one item per line (or added one input at a time):
+ * items that are only whitespace, or whose `key` is, are dropped before `schema` checks the rest.
+ */
+export function withoutBlankItems<T extends z.ZodType>(schema: T, key?: string) {
+  return z.preprocess((value) => {
+    if (!Array.isArray(value)) return value
+    return value.filter((item) => {
+      const text =
+        key && typeof item === "object" && item !== null ? (item as Record<string, unknown>)[key] : item
+      return typeof text !== "string" || text.trim() !== ""
+    })
+  }, schema)
+}

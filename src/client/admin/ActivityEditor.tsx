@@ -2,7 +2,7 @@ import { useEffect, useState } from "react"
 import { Link, useLocation } from "wouter"
 import { activityUIs } from "../../activities/ui-registry.ts"
 import { ApiError, api, useApi, useEventStream } from "../api.ts"
-import { Button, Card, Field, Input } from "../ui.tsx"
+import { Button, Card, Field, Input, Select } from "../ui.tsx"
 import { controlStage, useStage } from "./AdminLayout.tsx"
 
 interface Activity {
@@ -29,16 +29,17 @@ export function ActivityEditor({ id }: { id: string }) {
   if (!draft || !loaded.data) return null
 
   const ui = activityUIs[draft.type]
+  const saved = loaded.data
   const dirty = JSON.stringify(draft) !== JSON.stringify(loaded.data)
 
   const save = async () => {
     setSaving(true)
     try {
-      const saved = await api<Activity>(`/api/admin/activities/${id}`, {
+      const updated = await api<Activity>(`/api/admin/activities/${id}`, {
         method: "PATCH",
-        body: { title: draft.title, slug: draft.slug, config: draft.config },
+        body: { type: draft.type, title: draft.title, slug: draft.slug, config: draft.config },
       })
-      loaded.setData(saved)
+      loaded.setData(updated)
       setError(null)
     } catch (e) {
       setError(e instanceof ApiError ? e : new ApiError(0, String(e)))
@@ -59,13 +60,34 @@ export function ActivityEditor({ id }: { id: string }) {
         <Link href="/" className="text-sm text-slate-500 hover:underline">
           ← Activities
         </Link>
-        <h1 className="mr-auto text-xl font-semibold">{loaded.data.title}</h1>
+        <h1 className="text-xl font-semibold">{saved.title}</h1>
+        <span className="mr-auto rounded bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
+          {activityUIs[saved.type]?.definition.label ?? saved.type}
+        </span>
         <StageButtons activityId={id} />
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[1fr_20rem]">
         <Card className="space-y-4">
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid gap-3 sm:grid-cols-[minmax(0,12rem)_1fr_1fr]">
+            <Field label="Type">
+              <Select
+                value={draft.type}
+                onChange={(e) => {
+                  const type = e.target.value
+                  // Back to the saved type: get the saved settings back too.
+                  const config = type === saved.type ? saved.config : configForType(type, draft.config)
+                  setDraft({ ...draft, type, config })
+                }}
+              >
+                {!activityUIs[saved.type] && <option value={saved.type}>{saved.type}</option>}
+                {Object.values(activityUIs).map(({ definition }) => (
+                  <option key={definition.type} value={definition.type} title={definition.description}>
+                    {definition.label}
+                  </option>
+                ))}
+              </Select>
+            </Field>
             <Field label="Title (admin only)">
               <Input value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} />
             </Field>
@@ -73,6 +95,12 @@ export function ActivityEditor({ id }: { id: string }) {
               <Input value={draft.slug} onChange={(e) => setDraft({ ...draft, slug: e.target.value })} />
             </Field>
           </div>
+          {draft.type !== saved.type && (
+            <p className="text-sm text-amber-700">
+              Changing the type starts from fresh settings. It needs the activity off stage and without
+              answers.
+            </p>
+          )}
           <hr className="border-slate-100" />
           {ui ? (
             <ui.Editor config={draft.config} onChange={(config) => setDraft({ ...draft, config })} />
@@ -94,10 +122,22 @@ export function ActivityEditor({ id }: { id: string }) {
             </Button>
           </div>
         </Card>
-        <ResultsPanel activity={loaded.data} />
+        {/* Results of the old type do not fit the new one's preview. */}
+        <ResultsPanel key={saved.type} activity={saved} />
       </div>
     </div>
   )
+}
+
+/** Fresh settings for `type`, keeping the question or prompt already written. */
+function configForType(type: string, previous: unknown): unknown {
+  const config = activityUIs[type]?.definition.defaultConfig()
+  const old = (previous ?? {}) as { question?: unknown; prompt?: unknown }
+  const text = typeof old.question === "string" && old.question ? old.question : old.prompt
+  if (typeof text !== "string" || !text || typeof config !== "object" || config === null) return config
+  if ("question" in config) return { ...config, question: text }
+  if ("prompt" in config) return { ...config, prompt: text }
+  return config
 }
 
 function StageButtons({ activityId }: { activityId: string }) {

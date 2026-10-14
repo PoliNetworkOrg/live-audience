@@ -1,5 +1,5 @@
 import { z } from "zod"
-import { defineActivity } from "../types.ts"
+import { defineActivity, withoutBlankItems } from "../types.ts"
 
 export function normalizeAnswer(answer: string) {
   return answer
@@ -15,8 +15,8 @@ const configSchema = z
   .object({
     question: z.string().trim().min(1).max(300),
     answerMode: z.enum(["choice", "order"]).optional(),
-    choices: z.array(z.string().trim().min(1).max(32)).min(2).max(6).optional(),
-    acceptedAnswers: z.array(z.string().trim().min(1).max(120)).min(1).max(10),
+    choices: withoutBlankItems(z.array(z.string().trim().min(1).max(32)).min(2).max(6)).optional(),
+    acceptedAnswers: withoutBlankItems(z.array(z.string().trim().min(1).max(120)).min(1).max(10)),
   })
   .refine((config) => config.acceptedAnswers.every((answer) => normalizeAnswer(answer).length > 0), {
     message: "Accepted answers cannot contain only punctuation",

@@ -1,7 +1,7 @@
 import { useState } from "react"
 import { Link, useLocation } from "wouter"
 import { api, useApi } from "../api.ts"
-import { Button, Card, Field, Input } from "../ui.tsx"
+import { Button, Card, Field, Input, Select } from "../ui.tsx"
 import { controlStage, useStage } from "./AdminLayout.tsx"
 
 interface ActivitySummary {
@@ -102,17 +102,13 @@ function NewActivity({ types }: { types: ActivityType[] }) {
         }}
       >
         <Field label="Type">
-          <select
-            value={type}
-            onChange={(e) => setType(e.target.value)}
-            className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
-          >
+          <Select value={type} onChange={(e) => setType(e.target.value)}>
             {types.map((t) => (
               <option key={t.type} value={t.type} title={t.description}>
                 {t.label}
               </option>
             ))}
-          </select>
+          </Select>
         </Field>
         <Field label="Title (admin only)">
           <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Dinner poll" />

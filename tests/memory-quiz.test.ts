@@ -37,6 +37,18 @@ describe("memory quiz", () => {
     expect(memoryQuiz.audienceConfig?.(config)).toEqual({ question: config.question })
     expect(isCorrect({ ...config, acceptedAnswers: [""] }, "!!!")).toBe(false)
     expect(memoryQuiz.configSchema.safeParse({ ...config, acceptedAnswers: ["!!!"] }).success).toBe(false)
+    expect(memoryQuiz.configSchema.parse({ ...config, acceptedAnswers: ["", " CASSA ", "  "] })).toEqual({
+      ...config,
+      acceptedAnswers: ["CASSA"],
+    })
+    expect(
+      memoryQuiz.configSchema.parse({
+        question: "Which colour?",
+        answerMode: "choice",
+        choices: ["Red", "", "Blue ", " "],
+        acceptedAnswers: ["Blue"],
+      }).choices,
+    ).toEqual(["Red", "Blue"])
     expect(memoryQuiz.responseSchema(config).safeParse({ name: " ", answer: "CASSA" }).success).toBe(false)
     expect(
       memoryQuiz.responseSchema(config).safeParse({ name: "Ada", answer: "x".repeat(121) }).success,

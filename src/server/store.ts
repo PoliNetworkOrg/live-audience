@@ -136,8 +136,24 @@ export class Store {
     return activity
   }
 
-  updateActivity(id: string, patch: { title?: string; slug?: string; config?: unknown }): Activity {
+  updateActivity(
+    id: string,
+    patch: { type?: string; title?: string; slug?: string; config?: unknown },
+  ): Activity {
     const activity = this.requireActivity(id)
+    const typeChanged = patch.type !== undefined && patch.type !== activity.type
+    if (typeChanged && this.getStage().activityId === activity.id) {
+      throw new StoreError(409, "Take this activity off stage before changing its type")
+    }
+    // Answers and draws of the old type would not fit the new one.
+    if (
+      typeChanged &&
+      (this.listResponses(activity.id).length ||
+        this.getSetting(`number-draw:${activity.id}`) ||
+        this.getSetting(`quiz-draw:${activity.id}`))
+    ) {
+      throw new StoreError(409, "Reset the answers before changing the activity type")
+    }
     if (
       patch.config !== undefined &&
       activity.type === memoryQuiz.type &&
@@ -152,9 +168,11 @@ export class Store {
     ) {
       throw new StoreError(409, "Reset this estimate before editing its question or target")
     }
-    const definition = getActivityDefinition(activity.type)
-    if (!definition) throw new StoreError(400, `Unknown activity type "${activity.type}"`)
-    let config = activity.config
+    const type = patch.type ?? activity.type
+    const definition = getActivityDefinition(type)
+    if (!definition) throw new StoreError(400, `Unknown activity type "${type}"`)
+    // Without a config, a new type starts from its default one.
+    let config = typeChanged ? definition.defaultConfig() : activity.config
     if (patch.config !== undefined) {
       const parsed = definition.configSchema.safeParse(patch.config)
       if (!parsed.success) throw new StoreError(400, "Invalid configuration", parsed.error.issues)
@@ -163,14 +181,22 @@ export class Store {
     if (patch.slug !== undefined && patch.slug !== activity.slug) this.assertSlugFree(patch.slug)
     const updated: Activity = {
       ...activity,
+      type,
       title: patch.title ?? activity.title,
       slug: patch.slug ?? activity.slug,
       config,
       updatedAt: Date.now(),
     }
     this.db
-      .prepare("UPDATE activities SET title = ?, slug = ?, config = ?, updated_at = ? WHERE id = ?")
-      .run(updated.title, updated.slug, JSON.stringify(updated.config), updated.updatedAt, updated.id)
+      .prepare("UPDATE activities SET type = ?, title = ?, slug = ?, config = ?, updated_at = ? WHERE id = ?")
+      .run(
+        updated.type,
+        updated.title,
+        updated.slug,
+        JSON.stringify(updated.config),
+        updated.updatedAt,
+        updated.id,
+      )
     if (this.getStage().activityId === updated.id) this.events.emit("stage", this.getStage())
     this.events.emit("results", updated.id)
     return updated
