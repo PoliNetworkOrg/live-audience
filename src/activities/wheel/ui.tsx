@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { Saved, ShownAs, Verdict } from "../../client/audience-ui.tsx"
+import { Hint, Question, Saved, ShownAs, SubmitButton, Verdict } from "../../client/audience-ui.tsx"
 import { Field, Textarea } from "../../client/ui.tsx"
 import { defineActivityUI } from "../ui-types.ts"
 import { type WheelConfig, type WheelResponse, type WheelResults, wheel } from "./definition.ts"
@@ -38,33 +38,28 @@ function Audience({
     }
   }
   return (
-    <div className="space-y-5">
-      <h2 className="text-2xl font-semibold text-white">{config.prompt}</h2>
+    <div className="space-y-7">
+      <Question>{config.prompt}</Question>
       <ShownAs name={me.name} />
       {open && !response && (
-        <button
-          type="button"
-          disabled={saving}
-          onClick={() => void join()}
-          className="w-full rounded-2xl bg-white px-5 py-4 text-lg font-semibold text-brand-950 disabled:opacity-40"
-        >
+        <SubmitButton disabled={saving} onClick={() => void join()}>
           {saving ? "Joining…" : "Join the wheel"}
-        </button>
+        </SubmitButton>
       )}
       {!open ? (
         response ? (
-          <Verdict tone="info" emoji="🤞" title="You're on the wheel!">
-            Fingers crossed: watch the screen while it spins.
+          <Verdict tone="info" icon="eye" title="You're on the wheel">
+            Fingers crossed 🤞 Watch the screen while it spins.
           </Verdict>
         ) : (
-          <Verdict tone="info" emoji="🐢" title="Too late!">
+          <Verdict tone="info" icon="hourglass" title="Too late!">
             Entries are closed: the wheel spins without you this time.
           </Verdict>
         )
       ) : response ? (
-        <Saved id={response}>🎡 You're in! Good luck!</Saved>
+        <Saved id={response}>You're in. Good luck!</Saved>
       ) : (
-        <p className="text-center text-sm text-sky-100/70">One entry per person.</p>
+        <Hint className="text-center">One entry per person.</Hint>
       )}
     </div>
   )
@@ -72,9 +67,11 @@ function Audience({
 
 function Results({ results }: { config: WheelConfig; results: WheelResults }) {
   return (
-    <div className="space-y-2">
-      <p className="text-sm text-slate-500">{results.totalParticipants} participants</p>
-      <ol className="max-h-80 list-decimal space-y-1 overflow-auto pl-5 text-sm">
+    <div className="space-y-3">
+      <p className="text-sm text-slate-500">
+        <b className="font-display text-lg font-medium text-pn">{results.totalParticipants}</b> participants
+      </p>
+      <ol className="max-h-80 list-decimal space-y-1.5 overflow-auto pl-6 text-sm text-slate-700 marker:font-display marker:text-slate-400">
         {results.names.map((name, index) => (
           // biome-ignore lint/suspicious/noArrayIndexKey: equal display names are separate participants
           <li key={index} className="break-words">

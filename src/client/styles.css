@@ -1,33 +1,261 @@
 @import "tailwindcss";
 @import "@fontsource-variable/dm-sans";
+@import "@fontsource-variable/red-hat-text";
+@import "@fontsource/poppins/400.css";
+@import "@fontsource/poppins/500.css";
 
 @source "../activities";
 
+/*
+  The PoliNetwork slides theme (slides-polinetwork), itself taken from the website: Tailwind's slate
+  neutrals and blue/sky accents, frosted glass on soft blue shapes, pill buttons.
+  DM Sans for titles and numbers, Poppins for headlines, Red Hat Text for everything else.
+*/
 @theme {
-  --font-sans: "DM Sans Variable", ui-sans-serif, system-ui, sans-serif;
-  /* PoliNetwork blues, from the website's palette */
-  --color-brand-950: oklch(20% 0.055 252);
-  --color-brand-900: oklch(26% 0.065 251);
-  --color-brand-800: oklch(35.13% 0.062 249.28);
-  --color-brand-500: oklch(62% 0.17 255);
-  --color-brand-400: var(--color-blue-400);
-  --color-brand-300: var(--color-sky-300);
+  --font-sans: "Red Hat Text Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "DM Sans Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-headline: "Poppins", ui-sans-serif, system-ui, sans-serif;
+  /* logo and wordmark */
+  --color-pn: #1156ae;
+  --color-pn-deep: #20478f;
+  --ease-out-soft: cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 @layer base {
+  html {
+    background: var(--color-slate-100);
+    color: var(--color-slate-950);
+    -webkit-font-smoothing: antialiased;
+  }
   button:not(:disabled),
   [role="button"]:not(:disabled) {
     cursor: pointer;
   }
+  ::selection {
+    background: --alpha(var(--color-blue-400) / 30%);
+  }
 }
 
+/* Frosted glass card, as on the slides. */
+@utility glass {
+  background: linear-gradient(145deg, rgb(255 255 255 / 0.66), rgb(255 255 255 / 0.32));
+  -webkit-backdrop-filter: blur(24px) saturate(160%);
+  backdrop-filter: blur(24px) saturate(160%);
+  border: 1.5px solid rgb(255 255 255 / 0.8);
+  border-radius: 20px;
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.95),
+    0 30px 60px -36px rgb(17 86 174 / 0.45),
+    0 8px 22px -14px rgb(17 86 174 / 0.22);
+}
+
+/* Same glass, more opaque: forms and long text. */
+@utility glass-solid {
+  @apply glass;
+  background: linear-gradient(145deg, rgb(255 255 255 / 0.9), rgb(255 255 255 / 0.66));
+}
+
+/* Glass with a light blue tint, for what deserves attention. */
+@utility glass-tint {
+  @apply glass;
+  background: linear-gradient(145deg, rgb(116 212 255 / 0.32), rgb(81 162 255 / 0.16));
+}
+
+/* Small uppercase line above a title. */
+@utility kicker {
+  font-family: var(--font-sans);
+  font-weight: 500;
+  font-size: 0.75rem;
+  line-height: 1.2;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-sky-700);
+}
+
+/* Uppercase field and section label. */
+@utility label-caps {
+  font-family: var(--font-sans);
+  font-weight: 500;
+  font-size: 0.6875rem;
+  line-height: 1.2;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-slate-500);
+}
+
+/* The highlighted part of a big title, in a blue gradient (`<mark>` on the slides). */
+@utility text-gradient {
+  color: transparent;
+  background: linear-gradient(100deg, var(--color-sky-700), var(--color-blue-700));
+  -webkit-background-clip: text;
+  background-clip: text;
+}
+
+/* Progress bar track and fill (`.bars` on the slides). */
+@utility bar-track {
+  border-radius: 9999px;
+  background: rgb(255 255 255 / 0.65);
+  box-shadow: inset 0 1px 3px rgb(17 86 174 / 0.12);
+  overflow: hidden;
+}
+@utility bar-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--color-sky-300), var(--color-blue-400) 60%, var(--color-sky-700));
+  transition: width 0.8s var(--ease-out-soft);
+}
+
+/* ================= Background: the website's shapes and the white "looper" curves ================= */
+.pn-bg {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+  background: var(--color-slate-100);
+}
+.pn-bg > .shape {
+  position: absolute;
+  aspect-ratio: 1;
+  background: center / contain no-repeat;
+  animation: drift 28s ease-in-out infinite alternate;
+}
+.pn-bg > .s-looper {
+  background-image: url("./assets/shape-looper.svg");
+  width: 104vmax;
+  aspect-ratio: 1610 / 1562;
+  left: -30vmax;
+  top: -46vmax;
+  opacity: 0.95;
+  animation: sway 46s ease-in-out infinite alternate;
+}
+.pn-bg > .s-blue {
+  background-image: url("./assets/shape-big-blue.svg");
+  width: 80vmax;
+  right: -42vmax;
+  top: -38vmax;
+  opacity: 0.8;
+}
+.pn-bg > .s-teal {
+  background-image: url("./assets/shape-big-teal.svg");
+  width: 74vmax;
+  left: -30vmax;
+  bottom: -32vmax;
+  animation-duration: 34s;
+  animation-delay: -9s;
+}
+.pn-bg > .s-small {
+  background-image: url("./assets/shape-small-blue.svg");
+  width: 36vmax;
+  right: -10vmax;
+  top: 52vh;
+  animation-duration: 22s;
+  animation-delay: -5s;
+}
+.pn-bg > .wire {
+  position: absolute;
+  inset: -5%;
+  width: 110%;
+  height: 110%;
+  max-width: none;
+  object-fit: cover;
+  opacity: 0.55;
+  transform-origin: 70% 40%;
+  animation: sway 40s ease-in-out infinite alternate;
+}
+/* Admin: calmer, the content matters more than the scenery. */
+.pn-bg.calm > .shape {
+  opacity: 0.55;
+}
+
+@keyframes drift {
+  0% {
+    transform: translate(0, 0) scale(1) rotate(0deg);
+  }
+  50% {
+    transform: translate(3%, -2%) scale(1.06) rotate(8deg);
+  }
+  100% {
+    transform: translate(-2%, 3%) scale(0.96) rotate(-6deg);
+  }
+}
+@keyframes sway {
+  from {
+    transform: rotate(-3deg) scale(1);
+  }
+  to {
+    transform: rotate(3deg) scale(1.05);
+  }
+}
+
+/* ================= Emblem: the logo inside slowly turning glass rings (cover of the slides) ================= */
+.orbit {
+  position: relative;
+  display: grid;
+  place-items: center;
+  aspect-ratio: 1;
+}
+.orbit > .ring {
+  position: absolute;
+  border-radius: 50%;
+  border: 1.5px solid rgb(255 255 255 / 0.9);
+  background: radial-gradient(circle at 30% 25%, rgb(255 255 255 / 0.5), rgb(255 255 255 / 0.08) 60%);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.95),
+    0 30px 60px -36px rgb(17 86 174 / 0.45);
+}
+.orbit > .ring::before,
+.orbit > .ring::after {
+  content: "";
+  position: absolute;
+  width: 7%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 0 0 4px rgb(255 255 255 / 0.35);
+}
+.orbit > .ring::before {
+  top: 12%;
+  left: 12%;
+}
+.orbit > .ring::after {
+  bottom: 4%;
+  right: 30%;
+  width: 5%;
+}
+.orbit > .r1 {
+  inset: 0;
+  animation: spin 60s linear infinite;
+}
+.orbit > .r2 {
+  inset: 13%;
+  animation: spin 42s linear infinite reverse;
+}
+.orbit > .r3 {
+  inset: 25%;
+  animation: spin 30s linear infinite;
+}
+.orbit > img {
+  position: relative;
+  width: 37%;
+  filter: drop-shadow(0 16px 28px rgb(17 86 174 / 0.35));
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ================= Small motion ================= */
 @keyframes float {
   0%,
   100% {
-    transform: translate3d(0, 0, 0) scale(1);
+    transform: translate3d(0, 0, 0);
   }
   50% {
-    transform: translate3d(0, -12px, 0) scale(1.04);
+    transform: translate3d(0, -8px, 0);
   }
 }
 
@@ -47,7 +275,7 @@
 }
 
 .animate-pop-in {
-  animation: pop-in 0.35s cubic-bezier(0.2, 0.9, 0.3, 1.2) both;
+  animation: pop-in 0.45s var(--ease-out-soft) both;
 }
 
 @keyframes confetti {
@@ -66,13 +294,13 @@
     transform: scale(0.4) rotate(-20deg);
   }
   45% {
-    transform: scale(1.25) rotate(8deg);
+    transform: scale(1.2) rotate(8deg);
   }
   65% {
     transform: scale(0.95) rotate(-6deg);
   }
   80% {
-    transform: scale(1.05) rotate(3deg);
+    transform: scale(1.04) rotate(3deg);
   }
   100% {
     transform: none;
@@ -116,7 +344,9 @@
   }
   .animate-tada,
   .animate-wobble,
-  .animate-float {
+  .animate-float,
+  .pn-bg > *,
+  .orbit > .ring {
     animation: none;
   }
 }

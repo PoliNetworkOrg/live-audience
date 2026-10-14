@@ -1,5 +1,16 @@
 import { useEffect, useState } from "react"
-import { Saved, ShownAs, useOneOf, Verdict } from "../../client/audience-ui.tsx"
+import {
+  audienceField,
+  ChoiceButton,
+  Hint,
+  Question,
+  Saved,
+  ShownAs,
+  SubmitButton,
+  useOneOf,
+  Verdict,
+} from "../../client/audience-ui.tsx"
+import { Icon } from "../../client/icons.tsx"
 import { Field, Select, Textarea } from "../../client/ui.tsx"
 import { defineActivityUI } from "../ui-types.ts"
 import {
@@ -20,7 +31,7 @@ function Editor({
   onChange: (config: MemoryQuizConfig) => void
 }) {
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <Field label="Question">
         <Textarea
           value={config.question}
@@ -84,6 +95,9 @@ function Editor({
   )
 }
 
+const moveClass =
+  "flex size-10 items-center justify-center rounded-full text-lg text-pn transition hover:bg-white/80 disabled:text-slate-300 disabled:hover:bg-transparent"
+
 function Audience({
   config,
   me,
@@ -106,9 +120,9 @@ function Audience({
   /** The last answer this person tried to send, even if it arrived too late. */
   const [tried, setTried] = useState<string | null>(null)
   const nope = useOneOf([
-    "Nope, not it 🤔 Try again!",
+    "Nope, not it. Try again!",
     "Not quite! Have another go.",
-    "Wrong… but don't give up 💪",
+    "Wrong… but don't give up.",
   ])
   const withPoints = quizScoring(config) === "points"
   useEffect(() => {
@@ -128,35 +142,23 @@ function Audience({
       setSaving(false)
     }
   }
-  const inputClass =
-    "w-full rounded-2xl border border-white/20 bg-white/10 px-5 py-4 text-lg text-white outline-none focus:border-sky-300 disabled:opacity-60"
   return (
-    <div className="space-y-5">
-      <h2 className="text-2xl font-semibold text-white">{config.question}</h2>
+    <div className="space-y-7">
+      <Question>{config.question}</Question>
       <ShownAs name={me.name} />
       {config.answerMode === "choice" ? (
-        <fieldset className="space-y-3" disabled={!open || saving}>
-          <legend className="mb-2 text-sm text-sky-100">Choose your answer</legend>
+        <fieldset className="space-y-3.5" disabled={!open || saving}>
+          <legend className="mb-2 text-sm text-slate-500">Choose your answer</legend>
           {config.choices?.map((choice) => (
-            <label
-              key={choice}
-              className="flex items-center gap-3 rounded-2xl border border-white/20 p-4 text-white"
-            >
-              <input
-                type="radio"
-                name="quiz-choice"
-                value={choice}
-                checked={answer === choice}
-                onChange={() => setAnswer(choice)}
-              />
+            <ChoiceButton key={choice} selected={answer === choice} onClick={() => setAnswer(choice)}>
               {choice}
-            </label>
+            </ChoiceButton>
           ))}
         </fieldset>
       ) : config.answerMode === "order" ? (
-        <div className="space-y-3 text-white">
-          <p className="text-sm text-sky-100">Put these items from earliest to latest</p>
-          <ol className="space-y-2">
+        <div className="space-y-3.5">
+          <Hint>Put these items from earliest to latest</Hint>
+          <ol className="space-y-2.5">
             {answer.split(" → ").map((item, index, items) => {
               const move = (direction: number) => {
                 const destination = index + direction
@@ -166,27 +168,28 @@ function Audience({
                 setAnswer(reordered.join(" → "))
               }
               return (
-                <li key={item} className="flex items-center gap-2 rounded-2xl border border-white/20 p-3">
-                  <span className="flex-1">
-                    {index + 1}. {item}
+                <li key={item} className="glass flex items-center gap-3.5 py-2.5 pr-2 pl-3">
+                  <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-blue-400/15 font-display text-sm font-medium text-blue-700 tabular-nums">
+                    {index + 1}
                   </span>
+                  <span className="min-w-0 flex-1 font-headline break-words text-slate-800">{item}</span>
                   <button
                     type="button"
                     aria-label={`Move ${item} up`}
                     disabled={!open || saving || index === 0}
                     onClick={() => move(-1)}
-                    className="px-3 py-2 disabled:opacity-30"
+                    className={moveClass}
                   >
-                    ↑
+                    <Icon name="arrow-up" />
                   </button>
                   <button
                     type="button"
                     aria-label={`Move ${item} down`}
                     disabled={!open || saving || index === items.length - 1}
                     onClick={() => move(1)}
-                    className="px-3 py-2 disabled:opacity-30"
+                    className={moveClass}
                   >
-                    ↓
+                    <Icon name="arrow-down" />
                   </button>
                 </li>
               )
@@ -194,33 +197,28 @@ function Audience({
           </ol>
         </div>
       ) : (
-        <label className="block space-y-2">
-          <span className="text-sm text-sky-100">Your answer</span>
+        <label className="block space-y-2.5">
+          <span className="block text-sm text-slate-500">Your answer</span>
           <input
             value={answer}
             onChange={(event) => setAnswer(event.target.value)}
             maxLength={120}
             autoComplete="off"
             disabled={!open || saving}
-            className={inputClass}
+            className={audienceField}
           />
         </label>
       )}
       {open && (
-        <button
-          type="button"
-          disabled={!dirty || saving}
-          onClick={() => void send()}
-          className="w-full rounded-2xl bg-white px-5 py-4 text-lg font-semibold text-brand-950 disabled:opacity-40"
-        >
+        <SubmitButton disabled={!dirty || saving} onClick={() => void send()}>
           {saving ? "Sending…" : response ? "Update answer" : "Send answer"}
-        </button>
+        </SubmitButton>
       )}
-      <p className="text-sm text-sky-100/80">
+      <Hint>
         {withPoints
           ? "Every correct answer scores, and faster answers score more. The answer is revealed at the end."
           : "The first correct answer received by the server wins. The quiz then closes immediately."}
-      </p>
+      </Hint>
       {outcome ? (
         withPoints ? (
           <PointsVerdict {...outcome} />
@@ -228,26 +226,26 @@ function Audience({
           <QuizVerdict {...outcome} tried={tried ?? response?.answer} />
         )
       ) : !open ? (
-        <Verdict tone="info" emoji={withPoints ? "⏳" : "⏸️"} title="Answers locked">
+        <Verdict tone="info" icon="hourglass" title="Answers locked">
           {withPoints ? "Drumroll… the answer is coming up." : "Eyes on the presentation…"}
         </Verdict>
       ) : response && !dirty && withPoints ? (
         <Saved id={response}>
-          🔒 Answer locked in! You can change it until the reveal, but the clock keeps ticking.
+          Answer locked in. You can change it until the reveal, but the clock keeps ticking.
         </Saved>
       ) : response && !dirty ? (
         // A right answer closes the quiz on the spot: still open means this one was wrong.
-        <p key={JSON.stringify(response)} className="animate-wobble text-center font-medium text-rose-200">
+        <p key={JSON.stringify(response)} className="animate-wobble text-center font-medium text-rose-600">
           {nope}
         </p>
       ) : (
-        <p className="text-center text-sm text-sky-100/70">
+        <Hint className="text-center">
           {config.answerMode === "choice"
             ? "Choose an option."
             : config.answerMode === "order"
               ? "Arrange the items, then send your order."
               : "Type your answer freely."}
-        </p>
+        </Hint>
       )}
     </div>
   )
@@ -268,14 +266,14 @@ function PointsVerdict({
   const others = correct - 1
   if (youWon) {
     return (
-      <Verdict tone="win" emoji="⚡" title="Fastest correct answer!" points={points}>
+      <Verdict tone="win" icon="zap" title="Fastest correct answer!" points={points}>
         “{draw.answer}” was right, and nobody beat you to it.
       </Verdict>
     )
   }
   if (points) {
     return (
-      <Verdict tone="win" emoji="✅" title={cheer} points={points}>
+      <Verdict tone="win" icon="circle-check" title={cheer} points={points}>
         “{draw.answer}” was right
         {others > 0 ? `, like ${others === 1 ? "one other person" : `${others} others`}.` : "."}{" "}
         {draw.winner && `${draw.winner.name} was the fastest.`}
@@ -285,11 +283,11 @@ function PointsVerdict({
   const rightLine =
     correct === 0 ? "Nobody got it!" : `${correct} ${correct === 1 ? "person" : "people"} got it right.`
   return points === 0 ? (
-    <Verdict tone="lose" emoji="❌" title="Not quite" points={points}>
+    <Verdict tone="lose" icon="circle-x" title="Not quite" points={points}>
       The answer was “{draw.answer}”. {rightLine}
     </Verdict>
   ) : (
-    <Verdict tone="info" emoji="💡" title={`The answer was “${draw.answer}”`}>
+    <Verdict tone="info" icon="lightbulb" title={`The answer was “${draw.answer}”`}>
       {rightLine} Join in on the next one!
     </Verdict>
   )
@@ -309,21 +307,21 @@ function QuizVerdict({
   const cheer = useOneOf(["You got it first!", "Big brain!", "Fastest fingers!"])
   if (youWon) {
     return (
-      <Verdict points={points} tone="win" emoji="🏆" title={cheer}>
+      <Verdict points={points} tone="win" icon="trophy" title={cheer}>
         “{draw.answer}” was right, and you were the quickest. You win!
       </Verdict>
     )
   }
   if (!draw.winner) {
     return (
-      <Verdict points={points} tone="info" emoji="🤷" title="Nobody got it!">
+      <Verdict points={points} tone="info" icon="lightbulb" title="Nobody got it!">
         The answer was “{draw.answer}”.
       </Verdict>
     )
   }
   const hadIt = tried !== undefined && normalizeAnswer(tried) === normalizeAnswer(draw.answer)
   return (
-    <Verdict points={points} tone="lose" emoji="🐢" title="Too slow!">
+    <Verdict points={points} tone="lose" icon="hourglass" title="Too slow!">
       {hadIt
         ? `You had it right, but ${draw.winner.name} was faster.`
         : `${draw.winner.name} got there first: the answer was “${draw.answer}”.`}
@@ -333,20 +331,19 @@ function QuizVerdict({
 
 function Results({ results }: { config: MemoryQuizConfig; results: MemoryQuizResults }) {
   return (
-    <div className="space-y-2">
-      <p className="text-sm text-slate-500">{results.totalParticipants} participants</p>
+    <div className="space-y-3 text-sm text-slate-700">
+      <p className="text-slate-500">{results.totalParticipants} participants</p>
       {results.draw && (
         <>
-          <p>
-            Answer: <b>{results.draw.answer}</b>
-          </p>
+          <p className="label-caps">Answer</p>
+          <p className="font-display text-2xl font-medium tracking-tight text-pn">{results.draw.answer}</p>
           <p className="font-medium">
             {results.draw.winner
               ? `${results.draw.correct === undefined ? "First" : "Fastest"} correct answer: ${results.draw.winner.name}`
               : "No correct answer."}
           </p>
           {results.draw.correct !== undefined && (
-            <p className="text-sm text-slate-500">{results.draw.correct} correct answers</p>
+            <p className="text-slate-500">{results.draw.correct} correct answers</p>
           )}
         </>
       )}

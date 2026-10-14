@@ -1,6 +1,14 @@
 import { useEffect, useState } from "react"
-import { Saved, Verdict } from "../../client/audience-ui.tsx"
-import { cx, Field, Textarea } from "../../client/ui.tsx"
+import {
+  audienceField,
+  ChoiceButton,
+  Hint,
+  Question,
+  Saved,
+  SubmitButton,
+  Verdict,
+} from "../../client/audience-ui.tsx"
+import { Field, Textarea } from "../../client/ui.tsx"
 import { defineActivityUI } from "../ui-types.ts"
 import {
   type PurchaseConfig,
@@ -17,7 +25,7 @@ function Editor({
   onChange: (config: PurchaseConfig) => void
 }) {
   return (
-    <div className="space-y-3">
+    <div className="space-y-6">
       <Field label="Question">
         <Textarea value={config.question} onChange={(event) => onChange({ question: event.target.value })} />
       </Field>
@@ -63,33 +71,27 @@ function Audience({
     }
   }
   return (
-    <div className="space-y-5">
-      <h2 className="text-2xl font-semibold text-white">{config.question}</h2>
-      <div className="grid grid-cols-2 gap-3">
+    <div className="space-y-7">
+      <Question>{config.question}</Question>
+      <div className="grid grid-cols-2 gap-3.5">
         {[true, false].map((value) => (
-          <button
+          <ChoiceButton
             key={String(value)}
-            type="button"
-            aria-pressed={buy === value}
+            selected={buy === value}
             disabled={!open || saving}
             onClick={() => {
               setBuy(value)
               if (!value) setPrice("")
             }}
-            className={cx(
-              "rounded-2xl border px-5 py-4 text-xl font-semibold transition disabled:opacity-60",
-              buy === value
-                ? "border-sky-300 bg-sky-300 text-brand-950"
-                : "border-white/20 bg-white/10 text-white",
-            )}
+            className="justify-center text-xl"
           >
             {value ? "Yes" : "No"}
-          </button>
+          </ChoiceButton>
         ))}
       </div>
       {buy && (
-        <label className="block space-y-2">
-          <span className="text-sm text-sky-100">Maximum price you would pay (€), in whole euros</span>
+        <label className="block space-y-2.5">
+          <Hint>Maximum price you would pay (€), in whole euros</Hint>
           <input
             type="number"
             min={0}
@@ -98,40 +100,33 @@ function Audience({
             value={price}
             onChange={(event) => setPrice(event.target.value)}
             disabled={!open || saving}
-            className="w-full rounded-2xl border border-white/20 bg-white/10 px-5 py-4 text-lg text-white outline-none focus:border-sky-300 disabled:opacity-60"
+            className={audienceField}
           />
         </label>
       )}
       {open && (
-        <button
-          type="button"
-          disabled={!dirty || saving}
-          onClick={() => void send()}
-          className="w-full rounded-2xl bg-white px-5 py-4 text-lg font-semibold text-brand-950 disabled:opacity-40"
-        >
+        <SubmitButton disabled={!dirty || saving} onClick={() => void send()}>
           {saving ? "Sending…" : response ? "Update answer" : "Send answer"}
-        </button>
+        </SubmitButton>
       )}
       {!open ? (
         response?.buy ? (
-          <Verdict tone="info" emoji="🛒" title="Noted!">
+          <Verdict tone="info" icon="cart" title="Noted!">
             You'd pay up to €{response.price}. Let's see what everyone else said.
           </Verdict>
         ) : response ? (
-          <Verdict tone="info" emoji="👌" title="Noted!">
+          <Verdict tone="info" icon="circle-check" title="Noted!">
             Not for you, and that's useful to know too.
           </Verdict>
         ) : (
-          <Verdict tone="info" emoji="🔒" title="Answers are closed">
+          <Verdict tone="info" icon="lock" title="Answers are closed">
             No answer from you this time.
           </Verdict>
         )
       ) : response && !dirty ? (
-        <Saved id={response}>Answer saved ✓ You can change it until answers close.</Saved>
+        <Saved id={response}>Answer saved. You can change it until answers close.</Saved>
       ) : (
-        <p className="text-center text-sm text-sky-100/70">
-          {buy ? "Enter the price before sending." : "Choose yes or no."}
-        </p>
+        <Hint className="text-center">{buy ? "Enter the price before sending." : "Choose yes or no."}</Hint>
       )}
     </div>
   )
@@ -148,20 +143,24 @@ function Results({ results }: { config: PurchaseConfig; results: PurchaseResults
   ]
   const max = bars.reduce((best, bar) => Math.max(best, bar.count), 1)
   return (
-    <div className="space-y-3">
-      <div className="max-h-96 space-y-3 overflow-auto">
+    <div className="space-y-4">
+      <div className="max-h-96 space-y-4 overflow-auto">
         {bars.map((bar, index) => (
-          <div key={bar.label}>
+          <div key={bar.label} className="space-y-2">
             <div className="flex justify-between gap-2 text-sm">
-              <span>{bar.label}</span>
-              <span>
-                {bar.count} ({bar.percent}%)
+              <span className="font-headline text-slate-800">{bar.label}</span>
+              <span className="text-slate-500 tabular-nums">
+                {bar.count} · <b className="font-display font-medium text-pn">{bar.percent}%</b>
               </span>
             </div>
-            <div className="mt-1 h-3 rounded-full bg-slate-100">
+            <div className="bar-track h-2.5">
               <div
-                className={cx("h-3 rounded-full transition-all", index === 0 ? "bg-rose-500" : "bg-blue-600")}
-                style={{ width: `${(bar.count / max) * 100}%` }}
+                className="bar-fill"
+                style={{
+                  width: `${(bar.count / max) * 100}%`,
+                  // "No" stands apart from the price bands.
+                  background: index === 0 ? "var(--color-rose-400)" : undefined,
+                }}
               />
             </div>
           </div>

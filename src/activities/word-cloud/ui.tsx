@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react"
-import { Saved, Verdict } from "../../client/audience-ui.tsx"
-import { Field, Input, Textarea } from "../../client/ui.tsx"
+import { audienceField, Hint, Question, Saved, SubmitButton, Verdict } from "../../client/audience-ui.tsx"
+import { cx, Field, Input, Textarea } from "../../client/ui.tsx"
 import { defineActivityUI } from "../ui-types.ts"
 import {
   normalizeWord,
@@ -18,7 +18,7 @@ function Editor({
   onChange: (config: WordCloudConfig) => void
 }) {
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <Field label="Prompt">
         <Textarea
           value={config.prompt}
@@ -76,54 +76,43 @@ function Audience({
   }
 
   return (
-    <div className="space-y-5">
-      <h2 className="text-2xl font-semibold leading-tight text-balance text-white sm:text-3xl">
-        {config.prompt}
-      </h2>
-      <label className="block space-y-2">
-        <span className="text-sm text-sky-100">
-          Up to {config.maxWords} words or short phrases, one per line (60 characters each).
-        </span>
+    <div className="space-y-7">
+      <Question>{config.prompt}</Question>
+      <label className="block space-y-2.5">
+        <Hint>Up to {config.maxWords} words or short phrases, one per line (60 characters each).</Hint>
         <textarea
           value={text}
           onChange={(e) => setText(e.target.value)}
           disabled={!open || saving}
           rows={Math.min(config.maxWords + 1, 6)}
           maxLength={2010}
-          className="w-full rounded-2xl border border-white/20 bg-white/10 px-5 py-4 text-lg text-white outline-none focus:border-sky-300 disabled:opacity-60"
+          className={audienceField}
         />
       </label>
       {open && (
-        <button
-          type="button"
-          disabled={!parsed.success || !dirty || saving}
-          onClick={() => void send()}
-          className="w-full rounded-2xl bg-white px-5 py-4 text-lg font-semibold text-brand-950 transition disabled:opacity-40"
-        >
+        <SubmitButton disabled={!parsed.success || !dirty || saving} onClick={() => void send()}>
           {saving ? "Sending…" : response ? "Update answer" : "Send"}
-        </button>
+        </SubmitButton>
       )}
       {open && entries.length > 0 && !parsed.success && (
-        <p className="text-sm text-amber-200">
+        <p className="text-sm text-amber-700">
           Use up to {config.maxWords} lines, with at most 60 characters per entry.
         </p>
       )}
       {!open ? (
         response ? (
-          <Verdict tone="info" emoji="☁️" title="Your words are in the cloud!">
+          <Verdict tone="info" icon="cloud" title="Your words are in the cloud">
             Can you spot them on the screen?
           </Verdict>
         ) : (
-          <Verdict tone="info" emoji="🌫️" title="Answers are closed">
+          <Verdict tone="info" icon="lock" title="Answers are closed">
             No words from you this time.
           </Verdict>
         )
       ) : response && !dirty ? (
-        <Saved id={response}>Answer saved ✓ You can change it until answers close.</Saved>
+        <Saved id={response}>Answer saved. You can change it until answers close.</Saved>
       ) : (
-        <p className="text-center text-sm text-sky-100/70">
-          The more people repeat a word, the larger it appears.
-        </p>
+        <Hint className="text-center">The more people repeat a word, the larger it appears.</Hint>
       )}
     </div>
   )
@@ -132,7 +121,7 @@ function Audience({
 function Results({ results }: { config: WordCloudConfig; results: WordCloudResults }) {
   const max = results.words.reduce((value, word) => Math.max(value, word.count), 1)
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       <section
         className="flex min-h-32 flex-wrap items-center justify-center gap-x-3 gap-y-2"
         aria-label="Word cloud"
@@ -144,7 +133,10 @@ function Results({ results }: { config: WordCloudConfig; results: WordCloudResul
             <span
               key={text}
               title={`${count} respondents`}
-              className="max-w-full break-words font-semibold text-blue-600 transition-all"
+              className={cx(
+                "max-w-full font-display font-medium tracking-tight break-words transition-all",
+                count / max > 0.66 ? "text-pn" : count / max > 0.33 ? "text-sky-700" : "text-blue-400",
+              )}
               style={{ fontSize: `${14 + 34 * (count / max)}px`, lineHeight: 1.2 }}
             >
               {text}

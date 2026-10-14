@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react"
-import { Link, useLocation } from "wouter"
+import { useLocation } from "wouter"
 import { activityUIs } from "../../activities/ui-registry.ts"
 import { ApiError, api, useApi, useEventStream } from "../api.ts"
-import { Button, Card, Field, Input, Select } from "../ui.tsx"
+import { Icon } from "../icons.tsx"
+import { Button, Card, Field, Input, Select, Tag } from "../ui.tsx"
 import { PresentationSelect, type PresentationSummary } from "./ActivityList.tsx"
-import { controlStage, useStage } from "./AdminLayout.tsx"
+import { controlStage, PageHeader, useStage } from "./AdminLayout.tsx"
 
 interface Activity {
   id: string
@@ -64,21 +65,25 @@ export function ActivityEditor({ id }: { id: string }) {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-center gap-2">
-        <Link href="/" className="text-sm text-slate-500 hover:underline">
-          ← Activities
-        </Link>
-        <h1 className="text-xl font-semibold">{saved.title}</h1>
-        <span className="mr-auto rounded bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
-          {activityUIs[saved.type]?.definition.label ?? saved.type}
-        </span>
+    <div className="space-y-10">
+      <PageHeader
+        kicker="Activities"
+        back="/"
+        title={
+          <span className="flex flex-wrap items-center gap-3">
+            {saved.title}
+            <Tag className="font-sans tracking-normal">
+              {activityUIs[saved.type]?.definition.label ?? saved.type}
+            </Tag>
+          </span>
+        }
+      >
         <StageButtons activityId={id} />
-      </div>
+      </PageHeader>
 
-      <div className="grid gap-6 lg:grid-cols-[1fr_20rem]">
-        <Card className="space-y-4">
-          <div className="grid gap-3 sm:grid-cols-[minmax(0,12rem)_1fr_1fr]">
+      <div className="grid gap-8 lg:grid-cols-[1fr_22rem]">
+        <Card className="space-y-6">
+          <div className="grid gap-x-4 gap-y-5 sm:grid-cols-[minmax(0,12rem)_1fr_1fr]">
             <Field label="Type">
               <Select
                 value={draft.type}
@@ -112,19 +117,19 @@ export function ActivityEditor({ id }: { id: string }) {
             />
           </Field>
           {draft.type !== saved.type && (
-            <p className="text-sm text-amber-700">
+            <p className="rounded-xl bg-amber-400/15 px-3 py-2 text-sm text-amber-800">
               Changing the type starts from fresh settings. It needs the activity off stage and without
               answers.
             </p>
           )}
-          <hr className="border-slate-100" />
+          <hr className="border-t-[1.5px] border-white" />
           {ui ? (
             <ui.Editor config={draft.config} onChange={(config) => setDraft({ ...draft, config })} />
           ) : (
             <p className="text-sm text-rose-600">Unknown activity type "{draft.type}".</p>
           )}
           {error && <ErrorBox error={error} />}
-          <div className="flex items-center gap-2 border-t border-slate-100 pt-4">
+          <div className="flex items-center gap-2.5 border-t-[1.5px] border-white pt-5">
             <Button variant="primary" disabled={!dirty || saving} onClick={() => void save()}>
               {saving ? "Saving…" : "Save"}
             </Button>
@@ -134,7 +139,7 @@ export function ActivityEditor({ id }: { id: string }) {
               </Button>
             )}
             <Button variant="danger" className="ml-auto" onClick={() => void remove()}>
-              Delete
+              <Icon name="trash" /> Delete
             </Button>
           </div>
         </Card>
@@ -162,14 +167,14 @@ function StageButtons({ activityId }: { activityId: string }) {
   if (onStage) {
     return (
       <>
-        <span className="rounded bg-emerald-100 px-2 py-1 text-xs font-medium text-emerald-800">
-          on stage · {stage?.status}
-        </span>
+        <Tag tone={stage?.status === "open" ? "live" : "warn"}>on stage · {stage?.status}</Tag>
         {stage?.status === "open" ? (
-          <Button onClick={() => void controlStage("close")}>Close answers</Button>
+          <Button onClick={() => void controlStage("close")}>
+            <Icon name="lock" /> Close answers
+          </Button>
         ) : (
           <Button variant="success" onClick={() => void controlStage("open")}>
-            Open answers
+            <Icon name="play" /> Open answers
           </Button>
         )}
         <Button variant="ghost" onClick={() => void controlStage("clear")}>
@@ -184,7 +189,7 @@ function StageButtons({ activityId }: { activityId: string }) {
         Show (closed)
       </Button>
       <Button variant="success" onClick={() => void controlStage({ activity: activityId, status: "open" })}>
-        ▶ Put on stage & open
+        <Icon name="play" /> Put on stage & open
       </Button>
     </>
   )
@@ -215,11 +220,11 @@ function ResultsPanel({ activity }: { activity: Activity }) {
   const decided = Boolean((results?.results as { draw?: unknown } | undefined)?.draw)
 
   return (
-    <Card className="space-y-3 self-start">
+    <Card className="space-y-5 self-start">
       <div className="flex items-center justify-between">
-        <h2 className="font-medium">Live results</h2>
+        <h2 className="kicker">Live results</h2>
         <Button variant="ghost" onClick={() => void reset()}>
-          Reset answers
+          <Icon name="rotate-ccw" /> Reset answers
         </Button>
       </div>
       {drawLabel && !decided && (
@@ -232,11 +237,11 @@ function ResultsPanel({ activity }: { activity: Activity }) {
         (ui?.Results ? (
           <ui.Results config={activity.config} results={results.results} />
         ) : (
-          <pre className="overflow-auto rounded bg-slate-50 p-2 text-xs">
+          <pre className="overflow-auto rounded-xl bg-white/70 p-3 text-xs">
             {JSON.stringify(results.results, null, 2)}
           </pre>
         ))}
-      <p className="text-xs text-slate-500">
+      <p className="border-t-[1.5px] border-white pt-4 text-xs text-slate-500">
         API: <code className="break-all">GET /api/v1/activities/{activity.slug}/results</code>
       </p>
     </Card>
@@ -246,7 +251,7 @@ function ResultsPanel({ activity }: { activity: Activity }) {
 function ErrorBox({ error }: { error: ApiError }) {
   const issues = Array.isArray(error.details) ? (error.details as { path: unknown[]; message: string }[]) : []
   return (
-    <div className="rounded-lg bg-rose-50 p-3 text-sm text-rose-700">
+    <div className="rounded-xl border-[1.5px] border-rose-200 bg-rose-50/80 p-3 text-sm text-rose-700">
       <p className="font-medium">{error.message}</p>
       {issues.length > 0 && (
         <ul className="mt-1 list-disc pl-5">
