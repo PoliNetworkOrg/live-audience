@@ -102,6 +102,13 @@ export function ApiPage() {
               <td>Delete all answers</td>
             </tr>
             <tr>
+              <td>POST /api/v1/activities/:slug/draw</td>
+              <td>
+                Draw a number lottery, reveal a real number or a memory quiz; repeats return the same saved
+                outcome
+              </td>
+            </tr>
+            <tr>
               <td>GET /api/v1/events</td>
               <td>
                 Server-Sent Events: <code>stage</code> on every change, <code>results</code> for what is on

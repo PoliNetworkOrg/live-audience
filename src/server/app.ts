@@ -92,6 +92,7 @@ export function createApp({ store, session }: { store: Store; session: Middlewar
       ),
     )
     .get("/activities/:id/results", (c) => c.json(store.getResults(c.req.param("id"))))
+    .post("/activities/:id/draw", (c) => c.json(store.drawActivity(c.req.param("id"))))
     .post("/activities/:id/reset", (c) => {
       store.resetResponses(c.req.param("id"))
       return c.json(store.getResults(c.req.param("id")))
