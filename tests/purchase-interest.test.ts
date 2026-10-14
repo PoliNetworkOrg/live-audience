@@ -93,7 +93,7 @@ describe("purchase interest", () => {
         yes: 1,
         bands: [{ label: "11–20 €", count: 1 }],
       })
-      expect(await (await respond({ buy: false, price: 20 })).json()).toEqual({ response: { buy: false } })
+      expect((await (await respond({ buy: false, price: 20 })).json()).response).toEqual({ buy: false })
       const key = store.getApiKey()
       const results = await (
         await app.request("/api/v1/activities/merch-price/results", {

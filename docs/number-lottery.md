@@ -1,6 +1,6 @@
 # Number lottery
 
-Participants sign in, submit a display name and one integer from 0 to 100, and may
+Participants sign in, submit one integer from 0 to 100 under their account name, and may
 replace their guess until the presenter draws. Closest absolute distance wins.
 Equal distances trigger a random draw of one winner among the tied entries, explicitly
 announced on the participant page and presentation before the winner is revealed.
@@ -13,7 +13,7 @@ caller-supplied target. Closing the stage and persisting the outcome in SQLite s
 are one transaction. Repeated requests return the stored outcome, including after restart.
 Reopening is refused until the existing reset endpoint deletes responses and the outcome.
 Deleting an activity also deletes its saved outcome. No migration or dependency is needed.
-Submitted display names and guesses are presentation data; account identifiers remain private.
+Account names and guesses are presentation data; account identifiers remain private.
 
 Results are `{ prompt, totalParticipants, entries: [{ name, number }], draw }`, where draw
 is null before extraction or `{ number, distance, closest, winners, drawnAt }` afterward.

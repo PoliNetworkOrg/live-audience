@@ -7,6 +7,8 @@ export interface StageInfo {
   status: "open" | "closed"
   changedAt: number
   activity: { id: string; slug: string; type: string; title: string } | null
+  /** The running presentation, whose leaderboard the audience sees between activities. */
+  presentation: { id: string; slug: string; title: string } | null
 }
 
 const StageContext = createContext<StageInfo | null>(null)
@@ -22,6 +24,11 @@ export async function controlStage(
   return typeof action === "string"
     ? api<StageInfo>(`/api/admin/stage/${action}`, { method: "POST" })
     : api<StageInfo>("/api/admin/stage", { body: action })
+}
+
+/** Starts a presentation, or ends the running one with null. */
+export async function controlPresentation(presentation: string | null) {
+  return api<StageInfo>("/api/admin/stage/presentation", { body: { presentation } })
 }
 
 export function AdminLayout({ children }: { children: ReactNode }) {
@@ -60,6 +67,7 @@ export function AdminLayout({ children }: { children: ReactNode }) {
             </Link>
             <nav className="flex gap-1 text-sm">
               <NavLink href="/">Activities</NavLink>
+              <NavLink href="/presentations">Presentations</NavLink>
               <NavLink href="/api">API</NavLink>
               <a
                 href="/"
@@ -115,6 +123,15 @@ function StageBar({ stage }: { stage: StageInfo | null }) {
       )}
     >
       <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-2 px-4 py-1.5">
+        {stage.presentation && (
+          <Link
+            href={`/presentations/${stage.presentation.id}`}
+            className="rounded bg-sky-100 px-1.5 text-xs font-medium text-sky-800 hover:underline"
+            title="Running presentation: the audience sees its leaderboard between activities"
+          >
+            {stage.presentation.title}
+          </Link>
+        )}
         <span className="font-medium">On stage:</span>
         {stage.activity ? (
           <>

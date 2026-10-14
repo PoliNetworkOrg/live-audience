@@ -15,7 +15,7 @@ function setup() {
     store,
     session: async (c, next) => {
       const id = c.req.header("x-test-user")
-      c.set("user", id ? { id, name: "Private account name", canParticipate: true, isAdmin: false } : null)
+      c.set("user", id ? { id, name: id, canParticipate: true, isAdmin: false } : null)
       await next()
     },
   })
@@ -23,7 +23,8 @@ function setup() {
     app.request("/api/audience/respond", {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-test-user": id },
-      body: JSON.stringify({ activityId: activity.id, response: { name: id, answer: text } }),
+      // Old clients typed a name: it must be ignored in favour of the IdP one.
+      body: JSON.stringify({ activityId: activity.id, response: { name: "Typed name", answer: text } }),
     })
   return { db, store, activity, app, answer }
 }
@@ -34,7 +35,8 @@ describe("memory quiz", () => {
       expect(isCorrect(config, answer)).toBe(true)
     for (const answer of ["bar", "bar cassa staff uscita", "", "casse"])
       expect(isCorrect(config, answer)).toBe(false)
-    expect(memoryQuiz.audienceConfig?.(config)).toEqual({ question: config.question })
+    // Quizzes saved before scoring existed keep the first-correct-answer rule.
+    expect(memoryQuiz.audienceConfig?.(config)).toEqual({ question: config.question, scoring: "first" })
     expect(isCorrect({ ...config, acceptedAnswers: [""] }, "!!!")).toBe(false)
     expect(memoryQuiz.configSchema.safeParse({ ...config, acceptedAnswers: ["!!!"] }).success).toBe(false)
     expect(memoryQuiz.configSchema.parse({ ...config, acceptedAnswers: ["", " CASSA ", "  "] })).toEqual({
@@ -49,10 +51,10 @@ describe("memory quiz", () => {
         acceptedAnswers: ["Blue"],
       }).choices,
     ).toEqual(["Red", "Blue"])
-    expect(memoryQuiz.responseSchema(config).safeParse({ name: " ", answer: "CASSA" }).success).toBe(false)
-    expect(
-      memoryQuiz.responseSchema(config).safeParse({ name: "Ada", answer: "x".repeat(121) }).success,
-    ).toBe(false)
+    expect(memoryQuiz.responseSchema(config).parse({ name: "Ada", answer: "CASSA" })).toEqual({
+      answer: "CASSA",
+    })
+    expect(memoryQuiz.responseSchema(config).safeParse({ answer: "x".repeat(121) }).success).toBe(false)
   })
 
   it("records the first correct submission, closes the quiz and retains that winner", async () => {
@@ -61,10 +63,10 @@ describe("memory quiz", () => {
       const stage = await (
         await app.request("/api/audience/stage", { headers: { "x-test-user": "Ada" } })
       ).json()
-      expect(stage.activity.config).toEqual({ question: config.question })
+      expect(stage.activity.config).toEqual({ question: config.question, scoring: "first" })
       expect(JSON.stringify(stage)).not.toContain("CASSA")
       const wrong = await answer("Ada", "Bar")
-      expect(await wrong.json()).toEqual({ response: { name: "Ada", answer: "Bar" } })
+      expect(await wrong.json()).toMatchObject({ response: { answer: "Bar" }, stage: { outcome: null } })
       expect(store.getStage().status).toBe("open")
       expect(store.getResults(activity.id).results.draw).toBeNull()
       expect((await answer("Sara", " cassa! ")).status).toBe(200)
@@ -75,7 +77,14 @@ describe("memory quiz", () => {
         answer: "CASSA",
         winner: { name: "Sara", answer: "cassa!" },
       })
-      expect(JSON.stringify(results)).not.toContain("Private account name")
+      expect(JSON.stringify(results)).not.toContain("Typed name")
+      expect(JSON.stringify(results)).not.toContain("winnerUserId")
+      const outcome = async (id: string) =>
+        (await (await app.request("/api/audience/stage", { headers: { "x-test-user": id } })).json()).outcome
+      expect(await outcome("Sara")).toMatchObject({ draw: results.results.draw, youWon: true })
+      expect((await outcome("Sara")).points).toBeGreaterThan(0)
+      expect((await outcome("Ada")).points).toBe(0)
+      expect(await outcome("Ada")).toMatchObject({ youWon: false, draw: { winner: { name: "Sara" } } })
       expect(JSON.stringify(results)).not.toContain("userId")
       expect(new Store(db).drawActivity(activity.id)).toEqual(results)
       expect(() => store.setStageStatus("open")).toThrow("Reset this quiz")
@@ -146,9 +155,9 @@ describe("memory quiz", () => {
       db.exec(
         "CREATE TRIGGER reject_stage BEFORE UPDATE ON settings WHEN NEW.key = 'stage' BEGIN SELECT RAISE(ABORT, 'test failure'); END",
       )
-      expect(() =>
-        store.respond(activity.id, { id: "Ada", name: "Private" }, { name: "Ada", answer: "CASSA" }),
-      ).toThrow("test failure")
+      expect(() => store.respond(activity.id, { id: "Ada", name: "Ada" }, { answer: "CASSA" })).toThrow(
+        "test failure",
+      )
       expect(store.getResponse(activity.id, "Ada")).toBeNull()
       expect(store.getResults(activity.id).results.draw).toBeNull()
       expect(store.getStage().status).toBe("open")

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react"
+import { Saved, Verdict } from "../../client/audience-ui.tsx"
 import { Field, Input, Textarea } from "../../client/ui.tsx"
 import { defineActivityUI } from "../ui-types.ts"
 import {
@@ -107,13 +108,23 @@ function Audience({
           Use up to {config.maxWords} lines, with at most 60 characters per entry.
         </p>
       )}
-      <p className="text-center text-sm text-sky-100/70">
-        {!open
-          ? "Answers are closed."
-          : response && !dirty
-            ? "Answer saved ✓ You can change it until answers close."
-            : "The more people repeat a word, the larger it appears."}
-      </p>
+      {!open ? (
+        response ? (
+          <Verdict tone="info" emoji="☁️" title="Your words are in the cloud!">
+            Can you spot them on the screen?
+          </Verdict>
+        ) : (
+          <Verdict tone="info" emoji="🌫️" title="Answers are closed">
+            No words from you this time.
+          </Verdict>
+        )
+      ) : response && !dirty ? (
+        <Saved id={response}>Answer saved ✓ You can change it until answers close.</Saved>
+      ) : (
+        <p className="text-center text-sm text-sky-100/70">
+          The more people repeat a word, the larger it appears.
+        </p>
+      )}
     </div>
   )
 }

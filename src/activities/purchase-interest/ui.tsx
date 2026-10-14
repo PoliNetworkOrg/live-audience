@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react"
+import { Saved, Verdict } from "../../client/audience-ui.tsx"
 import { cx, Field, Textarea } from "../../client/ui.tsx"
 import { defineActivityUI } from "../ui-types.ts"
 import {
@@ -111,15 +112,27 @@ function Audience({
           {saving ? "Sending…" : response ? "Update answer" : "Send answer"}
         </button>
       )}
-      <p className="text-center text-sm text-sky-100/70">
-        {!open
-          ? "Answers are closed."
-          : response && !dirty
-            ? "Answer saved ✓ You can change it until answers close."
-            : buy
-              ? "Enter the price before sending."
-              : "Choose yes or no."}
-      </p>
+      {!open ? (
+        response?.buy ? (
+          <Verdict tone="info" emoji="🛒" title="Noted!">
+            You'd pay up to €{response.price}. Let's see what everyone else said.
+          </Verdict>
+        ) : response ? (
+          <Verdict tone="info" emoji="👌" title="Noted!">
+            Not for you, and that's useful to know too.
+          </Verdict>
+        ) : (
+          <Verdict tone="info" emoji="🔒" title="Answers are closed">
+            No answer from you this time.
+          </Verdict>
+        )
+      ) : response && !dirty ? (
+        <Saved id={response}>Answer saved ✓ You can change it until answers close.</Saved>
+      ) : (
+        <p className="text-center text-sm text-sky-100/70">
+          {buy ? "Enter the price before sending." : "Choose yes or no."}
+        </p>
+      )}
     </div>
   )
 }

@@ -14,6 +14,12 @@ export function normalizeAnswer(answer: string) {
 const configSchema = z
   .object({
     question: z.string().trim().min(1).max(300),
+    /**
+     * "points": every correct answer scores, faster ones more, and the answer is revealed by a
+     * draw. "first": the first correct answer wins and closes the quiz. Older quizzes have none
+     * and keep working as "first".
+     */
+    scoring: z.enum(["points", "first"]).optional(),
     answerMode: z.enum(["choice", "order"]).optional(),
     choices: withoutBlankItems(z.array(z.string().trim().min(1).max(32)).min(2).max(6)).optional(),
     acceptedAnswers: withoutBlankItems(z.array(z.string().trim().min(1).max(120)).min(1).max(10)),
@@ -47,11 +53,18 @@ function validStructuredAnswer(mode: "choice" | "order", choices: string[] | und
 }
 
 export type MemoryQuizConfig = z.infer<typeof configSchema>
-export type MemoryQuizResponse = { name: string; answer: string }
+export type MemoryQuizResponse = { answer: string }
 export type MemoryQuizDraw = {
   answer: string
-  winner: MemoryQuizResponse | null
+  /** `name` is the winner's name from the IdP: the first, or with points the fastest, correct answer. */
+  winner: { name: string; answer: string } | null
+  /** How many answers were correct. Only with points scoring. */
+  correct?: number
   drawnAt: number
+}
+
+export function quizScoring(config: Pick<MemoryQuizConfig, "scoring">) {
+  return config.scoring ?? "first"
 }
 export type MemoryQuizResults = {
   question: string
@@ -73,15 +86,11 @@ export const memoryQuiz = defineActivity<MemoryQuizConfig, MemoryQuizResponse, M
   description:
     "Free text, multiple choice or ordering. The first correct answer received by the server wins.",
   configSchema,
-  defaultConfig: () => ({ question: "", acceptedAnswers: [""] }),
+  defaultConfig: () => ({ question: "", scoring: "points", acceptedAnswers: [""] }),
+  drawLabel: "Reveal the answer",
   responseSchema: (config) =>
     z
       .object({
-        name: z
-          .string()
-          .max(200)
-          .transform((name) => name.normalize("NFKC").trim().replace(/\s+/gu, " "))
-          .pipe(z.string().min(1).max(80)),
         answer: z.string().trim().min(1).max(120),
       })
       .refine(
@@ -92,6 +101,7 @@ export const memoryQuiz = defineActivity<MemoryQuizConfig, MemoryQuizResponse, M
   // Correct answers must not be sent to participants before the result is revealed.
   audienceConfig: (config) => ({
     question: config.question,
+    scoring: quizScoring(config),
     ...(config.answerMode ? { answerMode: config.answerMode, choices: config.choices } : {}),
   }),
   aggregate: (config, responses) => ({

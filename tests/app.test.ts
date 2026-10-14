@@ -117,7 +117,7 @@ describe("a word cloud, driven by a presentation", () => {
 })
 
 describe("wheel entries", () => {
-  it("collects one display name per member, preserves equal names and closes entries", async () => {
+  it("puts each member on the wheel once, under their IdP name, and closes entries", async () => {
     const created = await call("/api/admin/activities", {
       as: "admin",
       body: { type: "wheel", title: "Draw", slug: "fortune-wheel" },
@@ -125,31 +125,38 @@ describe("wheel entries", () => {
     expect(created.status).toBe(201)
     const { id } = await created.json()
     const key = store.getApiKey()
-    const join = (as: string, name: string) =>
-      call("/api/audience/respond", { as, body: { activityId: id, response: { name } } })
-    expect((await join("socio", "Sara")).status).toBe(409)
+    const join = (as: string, response: unknown = {}) =>
+      call("/api/audience/respond", { as, body: { activityId: id, response } })
+    expect((await join("socio")).status).toBe(409)
     await call("/api/v1/stage", { key, body: { activity: "fortune-wheel" } })
-    expect((await join("guest", "Nico")).status).toBe(403)
-    for (const name of ["  ", "x".repeat(81)]) expect((await join("socio", name)).status).toBe(400)
-    expect((await join("socio", "  Sara   B. ")).status).toBe(200)
-    expect((await join("socio", "Display name")).status).toBe(200)
-    expect((await join("admin", "Display name")).status).toBe(200)
+    expect((await join("guest")).status).toBe(403)
+    expect((await join("socio", { name: "Typed name" })).status).toBe(200) // the typed name is ignored
+    expect((await join("socio")).status).toBe(200) // joining twice is still one entry
+    expect((await join("admin")).status).toBe(200)
     const results = await (await call("/api/v1/activities/fortune-wheel/results", { key })).json()
     expect(results.results).toEqual({
-      prompt: "Enter your name to join the wheel",
+      prompt: "Join the wheel for a chance to win",
       totalParticipants: 2,
-      names: ["Display name", "Display name"],
+      names: expect.arrayContaining(["Sara", "Ada"]),
     })
-    expect(JSON.stringify(results)).not.toContain("Sara")
+    expect(JSON.stringify(results)).not.toContain("Typed name")
     expect(JSON.stringify(results)).not.toContain("userId")
     await call("/api/v1/stage/close", { key, method: "POST" })
-    expect((await join("socio", "Late change")).status).toBe(409)
+    expect((await join("socio")).status).toBe(409)
     expect(await (await call("/api/audience/stage", { as: "socio" })).json()).toMatchObject({
       status: "closed",
-      myResponse: { name: "Display name" },
+      myResponse: {},
     })
     await call("/api/v1/activities/fortune-wheel/reset", { key, method: "POST" })
     expect(store.getResults(id).results).toMatchObject({ totalParticipants: 0, names: [] })
+  })
+
+  it("keeps people with the same name as separate entries", () => {
+    const entry = (userId: string) => ({ userId, userName: "Same name", response: {}, updatedAt: 0 })
+    expect(wheel.aggregate({ prompt: "Join" }, [entry("one"), entry("two")]).names).toEqual([
+      "Same name",
+      "Same name",
+    ])
   })
 })
 

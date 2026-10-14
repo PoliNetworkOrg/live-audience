@@ -3,6 +3,7 @@ import { ActivityEditor } from "./admin/ActivityEditor.tsx"
 import { ActivityList } from "./admin/ActivityList.tsx"
 import { AdminLayout } from "./admin/AdminLayout.tsx"
 import { ApiPage } from "./admin/ApiPage.tsx"
+import { PresentationList, PresentationPage } from "./admin/Presentations.tsx"
 import { AudiencePage } from "./audience/AudiencePage.tsx"
 
 export function App() {
@@ -18,6 +19,10 @@ export function App() {
               <ApiPage />
             </Route>
             <Route path="/activities/:id">{({ id }) => <ActivityEditor key={id} id={id} />}</Route>
+            <Route path="/presentations">
+              <PresentationList />
+            </Route>
+            <Route path="/presentations/:id">{({ id }) => <PresentationPage key={id} id={id} />}</Route>
           </Switch>
         </AdminLayout>
       </Route>

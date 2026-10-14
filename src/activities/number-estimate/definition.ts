@@ -1,5 +1,5 @@
 import { z } from "zod"
-import type { NumberLotteryResponse } from "../number-lottery/definition.ts"
+import type { NumberLotteryEntry, NumberLotteryResponse } from "../number-lottery/definition.ts"
 import { defineActivity } from "../types.ts"
 
 const configSchema = z.object({
@@ -12,7 +12,7 @@ export type NumberEstimateDraw = {
   number: number
   distance: number | null
   tied: number
-  winner: NumberEstimateResponse | null
+  winner: NumberLotteryEntry | null
   drawnAt: number
 }
 export type NumberEstimateResults = {
@@ -20,6 +20,11 @@ export type NumberEstimateResults = {
   totalParticipants: number
   draw: NumberEstimateDraw | null
 }
+/** 1 for the exact figure, down to 0 for a guess off by 100% of it or more. */
+export function estimateAccuracy(guess: number, target: number) {
+  return Math.max(0, 1 - Math.abs(guess - target) / Math.max(target, 1))
+}
+
 export const numberEstimate = defineActivity<
   NumberEstimateConfig,
   NumberEstimateResponse,
@@ -30,13 +35,9 @@ export const numberEstimate = defineActivity<
   description: "Guess a real figure. The closest guess wins; ties select one winner randomly.",
   configSchema,
   defaultConfig: () => ({ prompt: "Guess the real number", target: 0 }),
+  drawLabel: "Reveal the real number",
   responseSchema: () =>
     z.object({
-      name: z
-        .string()
-        .max(200)
-        .transform((name) => name.normalize("NFKC").trim().replace(/\s+/gu, " "))
-        .pipe(z.string().min(1).max(80)),
       number: z.number().int().min(0).max(1_000_000),
     }),
   audienceConfig: (config) => ({ prompt: config.prompt }),

@@ -27,6 +27,11 @@ export interface ActivityDefinition<Config = unknown, Response = unknown, Result
    */
   aggregate: (config: Config, responses: StoredResponse<Response>[]) => Results
   /**
+   * Types decided by `POST /activities/:slug/draw` (a lottery, a reveal…) name that action here,
+   * for the admin's button. They score points too: see `scoring.ts`.
+   */
+  drawLabel?: string
+  /**
    * What the audience gets to see of the config. Defaults to the whole config; override it to
    * hide things such as the right answer of a quiz.
    */

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react"
+import { Saved, useOneOf, Verdict } from "../../client/audience-ui.tsx"
 import { Button, cx, Field, Input, shortId, Textarea } from "../../client/ui.tsx"
 import { defineActivityUI } from "../ui-types.ts"
 import { type PollConfig, type PollResponse, type PollResults, poll } from "./definition.ts"
@@ -90,6 +91,7 @@ function Audience({
   submit: (response: PollResponse) => Promise<void>
 }) {
   const single = config.maxChoices === 1
+  const counted = useOneOf(["Your vote is in!", "Vote counted!", "Democracy thanks you!"])
   const [selected, setSelected] = useState<string[]>(response?.choices ?? [])
   const [saving, setSaving] = useState(false)
   const saved = response?.choices ?? []
@@ -178,17 +180,21 @@ function Audience({
           {saving ? "Sending…" : saved.length ? "Update vote" : "Vote"}
         </button>
       )}
-      <p className="text-center text-sm text-sky-100/70">
-        {!open
-          ? saved.length
-            ? "Voting is closed. Your vote is in!"
-            : "Voting is closed."
-          : saved.length && !dirty
-            ? "Vote saved ✓ You can change it until the poll closes."
-            : single
-              ? "Tap an option to vote."
-              : ""}
-      </p>
+      {!open ? (
+        saved.length ? (
+          <Verdict tone="info" emoji="🗳️" title={counted}>
+            Eyes on the screen for the results 👀
+          </Verdict>
+        ) : (
+          <Verdict tone="info" emoji="😴" title="You missed this one">
+            Voting is closed. Be quicker next time!
+          </Verdict>
+        )
+      ) : saved.length && !dirty ? (
+        <Saved id={saved}>Vote saved ✓ You can change it until the poll closes.</Saved>
+      ) : (
+        single && <p className="text-center text-sm text-sky-100/70">Tap an option to vote.</p>
+      )}
     </div>
   )
 }

@@ -3,6 +3,7 @@ import { Link, useLocation } from "wouter"
 import { activityUIs } from "../../activities/ui-registry.ts"
 import { ApiError, api, useApi, useEventStream } from "../api.ts"
 import { Button, Card, Field, Input, Select } from "../ui.tsx"
+import { PresentationSelect, type PresentationSummary } from "./ActivityList.tsx"
 import { controlStage, useStage } from "./AdminLayout.tsx"
 
 interface Activity {
@@ -11,11 +12,13 @@ interface Activity {
   type: string
   title: string
   config: unknown
+  presentationId: string | null
   updatedAt: number
 }
 
 export function ActivityEditor({ id }: { id: string }) {
   const loaded = useApi<Activity>(`/api/admin/activities/${id}`)
+  const presentations = useApi<PresentationSummary[]>("/api/admin/presentations")
   const [draft, setDraft] = useState<Activity | null>(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<ApiError | null>(null)
@@ -37,7 +40,13 @@ export function ActivityEditor({ id }: { id: string }) {
     try {
       const updated = await api<Activity>(`/api/admin/activities/${id}`, {
         method: "PATCH",
-        body: { type: draft.type, title: draft.title, slug: draft.slug, config: draft.config },
+        body: {
+          type: draft.type,
+          title: draft.title,
+          slug: draft.slug,
+          config: draft.config,
+          presentationId: draft.presentationId,
+        },
       })
       loaded.setData(updated)
       setError(null)
@@ -95,6 +104,13 @@ export function ActivityEditor({ id }: { id: string }) {
               <Input value={draft.slug} onChange={(e) => setDraft({ ...draft, slug: e.target.value })} />
             </Field>
           </div>
+          <Field label="Presentation" hint="Points scored here count towards its leaderboard.">
+            <PresentationSelect
+              presentations={presentations.data ?? []}
+              value={draft.presentationId ?? ""}
+              onChange={(presentationId) => setDraft({ ...draft, presentationId: presentationId || null })}
+            />
+          </Field>
           {draft.type !== saved.type && (
             <p className="text-sm text-amber-700">
               Changing the type starts from fresh settings. It needs the activity off stage and without
@@ -181,10 +197,22 @@ function ResultsPanel({ activity }: { activity: Activity }) {
   })
   const ui = activityUIs[activity.type]
 
+  const [drawError, setDrawError] = useState<string | null>(null)
   const reset = async () => {
-    if (!confirm("Delete every answer to this activity?")) return
+    if (!confirm("Delete every answer and point of this activity?")) return
     await api(`/api/admin/activities/${activity.id}/reset`, { method: "POST" })
+    setDrawError(null)
   }
+  const draw = async () => {
+    try {
+      await api(`/api/admin/activities/${activity.id}/draw`, { method: "POST" })
+      setDrawError(null)
+    } catch (e) {
+      setDrawError(e instanceof Error ? e.message : String(e))
+    }
+  }
+  const drawLabel = ui?.definition.drawLabel
+  const decided = Boolean((results?.results as { draw?: unknown } | undefined)?.draw)
 
   return (
     <Card className="space-y-3 self-start">
@@ -194,6 +222,12 @@ function ResultsPanel({ activity }: { activity: Activity }) {
           Reset answers
         </Button>
       </div>
+      {drawLabel && !decided && (
+        <Button variant="primary" className="w-full" onClick={() => void draw()}>
+          {drawLabel}
+        </Button>
+      )}
+      {drawError && <p className="text-sm text-rose-600">{drawError}</p>}
       {results &&
         (ui?.Results ? (
           <ui.Results config={activity.config} results={results.results} />
