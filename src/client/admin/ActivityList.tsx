@@ -1,9 +1,16 @@
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { Link, useLocation } from "wouter"
 import { api, useApi } from "../api.ts"
 import { Icon } from "../icons.tsx"
 import { Button, Card, Field, Input, Select, Tag } from "../ui.tsx"
-import { controlStage, PageHeader, useStage } from "./AdminLayout.tsx"
+import {
+  activitiesResetEvent,
+  controlStage,
+  PageHeader,
+  resetActivity,
+  resetPresentation,
+  useStage,
+} from "./AdminLayout.tsx"
 
 export interface ActivitySummary {
   id: string
@@ -12,6 +19,8 @@ export interface ActivitySummary {
   title: string
   /** Slug of the presentation it belongs to. */
   presentation: string | null
+  /** How many people answered. */
+  answers: number
 }
 
 export interface ActivityType {
@@ -26,8 +35,32 @@ export interface PresentationSummary {
   title: string
 }
 
-export function ActivityList() {
+/** Every activity, reloaded when the stage changes or answers are reset. */
+export function useActivities() {
   const activities = useApi<ActivitySummary[]>("/api/admin/activities")
+  const changedAt = useStage()?.changedAt
+  const seen = useRef(changedAt)
+  const { reload } = activities
+  useEffect(() => {
+    window.addEventListener(activitiesResetEvent, reload)
+    return () => window.removeEventListener(activitiesResetEvent, reload)
+  }, [reload])
+  useEffect(() => {
+    if (changedAt === seen.current) return
+    // The first stage to arrive is the one the list was loaded with.
+    if (seen.current !== undefined) reload()
+    seen.current = changedAt
+  }, [changedAt, reload])
+  return activities
+}
+
+/** "3 answers", or nothing when nobody answered. */
+export function answerCount(answers: number) {
+  return answers === 0 ? null : `${answers} ${answers === 1 ? "answer" : "answers"}`
+}
+
+export function ActivityList() {
+  const activities = useActivities()
   const types = useApi<ActivityType[]>("/api/admin/types")
   const presentations = useApi<PresentationSummary[]>("/api/admin/presentations")
   const groups = [
@@ -52,35 +85,64 @@ export function ActivityList() {
       {activities.data?.length === 0 && <p className="text-sm text-slate-500">No activities yet.</p>}
       {groups.map((group) => (
         <section key={group.key ?? ""} className="space-y-4">
-          <h2 className="px-1 font-headline text-lg text-slate-800">
-            {group.presentation ? (
-              <Link
-                href={`/presentations/${group.presentation.id}`}
-                className="group inline-flex items-center gap-2 hover:text-pn"
-              >
-                {group.presentation.title}
-                <Icon
-                  name="arrow-right"
-                  className="size-4 text-sky-700 transition group-hover:translate-x-0.5"
-                />
-              </Link>
-            ) : (
-              <span className="text-slate-500">Not in a presentation</span>
+          <div className="flex items-center gap-3 px-1">
+            <h2 className="mr-auto font-headline text-lg text-slate-800">
+              {group.presentation ? (
+                <Link
+                  href={`/presentations/${group.presentation.id}`}
+                  className="group inline-flex items-center gap-2 hover:text-pn"
+                >
+                  {group.presentation.title}
+                  <Icon
+                    name="arrow-right"
+                    className="size-4 text-sky-700 transition group-hover:translate-x-0.5"
+                  />
+                </Link>
+              ) : (
+                <span className="text-slate-500">Not in a presentation</span>
+              )}
+            </h2>
+            {group.presentation && (
+              <PresentationResetButton presentation={group.presentation} onReset={activities.reload} />
             )}
-          </h2>
-          <ActivityRows activities={group.activities} types={types.data ?? []} />
+          </div>
+          <ActivityRows activities={group.activities} types={types.data ?? []} onReset={activities.reload} />
         </section>
       ))}
     </div>
   )
 }
 
+/** Clears every answer of a presentation's activities, e.g. between two rehearsals. */
+export function PresentationResetButton({
+  presentation,
+  onReset,
+}: {
+  presentation: PresentationSummary
+  onReset: () => void
+}) {
+  return (
+    <Button
+      variant="ghost"
+      title="Delete every answer, draw and point of its activities"
+      onClick={async () => {
+        if (await resetPresentation(presentation)) onReset()
+      }}
+    >
+      <Icon name="rotate-ccw" /> Reset answers
+    </Button>
+  )
+}
+
 export function ActivityRows({
   activities,
   types,
+  onReset,
 }: {
   activities: ActivitySummary[]
   types: ActivityType[]
+  /** Called after an activity's answers were reset from its row. */
+  onReset: () => void
 }) {
   const stage = useStage()
   return (
@@ -101,11 +163,23 @@ export function ActivityRows({
               <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
                 <Tag>{label}</Tag>
                 <code className="font-mono">{a.slug}</code>
+                {answerCount(a.answers) && <span>· {answerCount(a.answers)}</span>}
               </div>
             </div>
             {onStage && (
               <Tag tone={stage?.status === "open" ? "live" : "warn"}>on stage · {stage?.status}</Tag>
             )}
+            <Button
+              variant="ghost"
+              className="px-2.5"
+              title="Reset answers"
+              aria-label={`Reset the answers of ${a.title}`}
+              onClick={async () => {
+                if (await resetActivity(a)) onReset()
+              }}
+            >
+              <Icon name="rotate-ccw" />
+            </Button>
             <Button
               variant={onStage ? "secondary" : "success"}
               disabled={onStage && stage?.status === "open"}
@@ -169,13 +243,11 @@ export function NewActivity({
         }}
       >
         <Field label="Type">
-          <Select value={type} onChange={(e) => setType(e.target.value)}>
-            {types.map((t) => (
-              <option key={t.type} value={t.type} title={t.description}>
-                {t.label}
-              </option>
-            ))}
-          </Select>
+          <Select
+            value={type}
+            onChange={setType}
+            options={types.map((t) => ({ value: t.type, label: t.label, description: t.description }))}
+          />
         </Field>
         <Field label="Title (admin only)">
           <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Dinner poll" />
@@ -206,13 +278,10 @@ export function PresentationSelect({
   onChange: (id: string) => void
 }) {
   return (
-    <Select value={value} onChange={(e) => onChange(e.target.value)}>
-      <option value="">None</option>
-      {presentations.map((p) => (
-        <option key={p.id} value={p.id}>
-          {p.title}
-        </option>
-      ))}
-    </Select>
+    <Select
+      value={value}
+      onChange={onChange}
+      options={[{ value: "", label: "None" }, ...presentations.map((p) => ({ value: p.id, label: p.title }))]}
+    />
   )
 }

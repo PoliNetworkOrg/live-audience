@@ -151,6 +151,14 @@ export class Store {
     return (rows as unknown as ActivityRow[]).map(toActivity)
   }
 
+  /** How many people answered each activity; activities nobody answered are missing. */
+  answerCounts(): Map<string, number> {
+    const rows = this.db
+      .prepare("SELECT activity_id, COUNT(*) AS answers FROM responses GROUP BY activity_id")
+      .all() as { activity_id: string; answers: number }[]
+    return new Map(rows.map((row) => [row.activity_id, row.answers]))
+  }
+
   /** Looks an activity up by id or slug, so the API can use readable slugs. */
   getActivity(idOrSlug: string): Activity | undefined {
     const row = this.db.prepare("SELECT * FROM activities WHERE id = ? OR slug = ?").get(idOrSlug, idOrSlug)

@@ -42,29 +42,30 @@ function Editor({
         <Select
           className="w-auto"
           value={quizScoring(config)}
-          onChange={(event) => onChange({ ...config, scoring: event.target.value as "points" | "first" })}
-        >
-          <option value="points">Points: every correct answer scores, faster ones more</option>
-          <option value="first">First correct answer wins and closes the quiz</option>
-        </Select>
+          onChange={(scoring) => onChange({ ...config, scoring: scoring as "points" | "first" })}
+          options={[
+            { value: "points", label: "Points: every correct answer scores, faster ones more" },
+            { value: "first", label: "First correct answer wins and closes the quiz" },
+          ]}
+        />
       </Field>
       <Field label="Answer format">
         <Select
           className="w-auto"
           value={config.answerMode ?? "text"}
-          onChange={(event) => {
-            const mode = event.target.value
+          onChange={(mode) =>
             onChange({
               ...config,
               answerMode: mode === "text" ? undefined : (mode as "choice" | "order"),
               choices: mode === "text" ? undefined : (config.choices ?? []),
             })
-          }}
-        >
-          <option value="text">Free text</option>
-          <option value="choice">Choose an option</option>
-          <option value="order">Put items in order</option>
-        </Select>
+          }
+          options={[
+            { value: "text", label: "Free text" },
+            { value: "choice", label: "Choose an option" },
+            { value: "order", label: "Put items in order" },
+          ]}
+        />
       </Field>
       {config.answerMode && (
         <Field
