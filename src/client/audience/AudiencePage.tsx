@@ -227,7 +227,7 @@ function StatusPill({ open }: { open: boolean }) {
     >
       {open ? (
         <span className="relative flex size-2">
-          <span className="absolute inset-0 animate-ping rounded-full bg-white/80" />
+          <span className="absolute inset-0 motion-safe:animate-ping rounded-full bg-white/80" />
           <span className="relative size-2 rounded-full bg-white" />
         </span>
       ) : (
@@ -241,7 +241,7 @@ function StatusPill({ open }: { open: boolean }) {
 function ConnectionDot({ connected }: { connected: boolean }) {
   return connected ? null : (
     <span className="inline-flex items-center gap-1.5 text-xs font-medium text-amber-700">
-      <span className="size-1.5 animate-pulse rounded-full bg-amber-400" /> Reconnecting…
+      <span className="size-1.5 motion-safe:animate-pulse rounded-full bg-amber-400" /> Reconnecting…
     </span>
   )
 }
@@ -249,7 +249,7 @@ function ConnectionDot({ connected }: { connected: boolean }) {
 function Spinner() {
   return (
     <div className="flex justify-center">
-      <span className="size-8 animate-spin rounded-full border-2 border-white border-t-blue-400" />
+      <span className="size-8 motion-safe:animate-spin rounded-full border-2 border-white border-t-blue-400" />
     </div>
   )
 }
