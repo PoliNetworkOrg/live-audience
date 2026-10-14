@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react"
 import { Link, useLocation } from "wouter"
 import { api, useApi, useEventStream } from "../api.ts"
-import { Button, Card, Field, Input } from "../ui.tsx"
+import { Rank } from "../audience-ui.tsx"
+import { Icon } from "../icons.tsx"
+import { Button, Card, Field, Input, Tag } from "../ui.tsx"
 import {
   ActivityRows,
   type ActivitySummary,
@@ -10,7 +12,7 @@ import {
   type PresentationSummary,
   slugify,
 } from "./ActivityList.tsx"
-import { controlPresentation, useStage } from "./AdminLayout.tsx"
+import { controlPresentation, PageHeader, useStage } from "./AdminLayout.tsx"
 
 interface Leaderboard {
   leaderboard: { rank: number; name: string; points: number }[]
@@ -37,17 +39,17 @@ export function PresentationList() {
   }
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-semibold">Presentations</h1>
-        <p className="text-sm text-slate-500">
+    <div className="space-y-10">
+      <div className="space-y-4">
+        <PageHeader kicker="Live admin" title="Presentations" />
+        <p className="max-w-2xl font-headline text-pretty text-slate-600">
           Group the activities of one talk: their points add up to a leaderboard, which the audience sees
           between activities.
         </p>
       </div>
       <Card>
         <form
-          className="grid items-end gap-3 sm:grid-cols-[1fr_1fr_auto]"
+          className="grid items-end gap-x-4 gap-y-5 sm:grid-cols-[1fr_1fr_auto]"
           onSubmit={(e) => {
             e.preventDefault()
             void create()
@@ -64,29 +66,28 @@ export function PresentationList() {
             />
           </Field>
           <Button type="submit" variant="primary" disabled={!title.trim() || !effectiveSlug} className="py-2">
-            Create
+            <Icon name="plus" /> Create
           </Button>
         </form>
-        {error && <p className="mt-2 text-sm text-rose-600">{error}</p>}
+        {error && <p className="mt-3 text-sm text-rose-600">{error}</p>}
       </Card>
-      <Card className="divide-y divide-slate-100 p-0">
+      <Card className="divide-y-[1.5px] divide-white p-0">
         {presentations.data?.length === 0 && (
-          <p className="p-4 text-sm text-slate-500">No presentations yet.</p>
+          <p className="px-6 py-5 text-sm text-slate-500">No presentations yet.</p>
         )}
         {presentations.data?.map((p) => (
-          <div key={p.id} className="flex items-center gap-3 px-4 py-3">
-            <div className="min-w-0 flex-1">
-              <Link href={`/presentations/${p.id}`} className="font-medium hover:underline">
-                {p.title}
-              </Link>
-              <div className="text-xs text-slate-500">
-                <code>{p.slug}</code>
-              </div>
+          <Link
+            key={p.id}
+            href={`/presentations/${p.id}`}
+            className="group flex items-center gap-4 px-6 py-4 transition first:rounded-t-[20px] last:rounded-b-[20px] hover:bg-white/60"
+          >
+            <div className="min-w-0 flex-1 space-y-1">
+              <div className="truncate font-headline text-slate-800 group-hover:text-pn">{p.title}</div>
+              <code className="font-mono text-xs text-slate-500">{p.slug}</code>
             </div>
-            {stage?.presentation?.id === p.id && (
-              <span className="rounded bg-sky-100 px-2 py-0.5 text-xs font-medium text-sky-800">running</span>
-            )}
-          </div>
+            {stage?.presentation?.id === p.id && <Tag tone="blue">running</Tag>}
+            <Icon name="arrow-right" className="size-4 text-sky-700 transition group-hover:translate-x-0.5" />
+          </Link>
         ))}
       </Card>
     </div>
@@ -137,34 +138,36 @@ export function PresentationPage({ id }: { id: string }) {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-center gap-2">
-        <Link href="/presentations" className="text-sm text-slate-500 hover:underline">
-          ← Presentations
-        </Link>
-        <h1 className="text-xl font-semibold">{presentation.title}</h1>
-        {running && (
-          <span className="mr-auto rounded bg-sky-100 px-2 py-0.5 text-xs font-medium text-sky-800">
-            running
+    <div className="space-y-10">
+      <PageHeader
+        kicker="Presentations"
+        back="/presentations"
+        title={
+          <span className="flex flex-wrap items-center gap-3">
+            {presentation.title}
+            {running && (
+              <Tag tone="blue" className="font-sans tracking-normal">
+                running
+              </Tag>
+            )}
           </span>
+        }
+      >
+        {running ? (
+          <Button onClick={() => void controlPresentation(null)}>
+            <Icon name="square" /> End presentation
+          </Button>
+        ) : (
+          <Button variant="success" onClick={() => void controlPresentation(presentation.id)}>
+            <Icon name="play" /> Start presentation
+          </Button>
         )}
-        <span className={running ? "" : "ml-auto"}>
-          {running ? (
-            <Button variant="ghost" onClick={() => void controlPresentation(null)}>
-              End presentation
-            </Button>
-          ) : (
-            <Button variant="success" onClick={() => void controlPresentation(presentation.id)}>
-              Start presentation
-            </Button>
-          )}
-        </span>
-      </div>
+      </PageHeader>
 
-      <div className="grid gap-6 lg:grid-cols-[1fr_20rem]">
-        <div className="space-y-6">
-          <section className="space-y-2">
-            <h2 className="font-medium">Activities</h2>
+      <div className="grid gap-8 lg:grid-cols-[1fr_22rem]">
+        <div className="space-y-8">
+          <section className="space-y-4">
+            <h2 className="px-1 font-headline text-lg text-slate-800">Activities</h2>
             <ActivityRows
               activities={activities.data?.filter((a) => a.presentation === presentation.slug) ?? []}
               types={types.data ?? []}
@@ -177,8 +180,8 @@ export function PresentationPage({ id }: { id: string }) {
               />
             )}
           </section>
-          <Card className="space-y-3">
-            <div className="grid gap-3 sm:grid-cols-2">
+          <Card className="space-y-6">
+            <div className="grid gap-x-4 gap-y-5 sm:grid-cols-2">
               <Field label="Title">
                 <Input value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} />
               </Field>
@@ -187,15 +190,15 @@ export function PresentationPage({ id }: { id: string }) {
               </Field>
             </div>
             {error && <p className="text-sm text-rose-600">{error}</p>}
-            <div className="flex flex-wrap gap-2 border-t border-slate-100 pt-3">
+            <div className="flex flex-wrap gap-2.5 border-t-[1.5px] border-white pt-5">
               <Button variant="primary" disabled={!dirty} onClick={() => void save()}>
                 Save
               </Button>
               <Button variant="danger" className="ml-auto" onClick={() => void reset()}>
-                Reset all answers
+                <Icon name="rotate-ccw" /> Reset all answers
               </Button>
               <Button variant="danger" onClick={() => void remove()}>
-                Delete
+                <Icon name="trash" /> Delete
               </Button>
             </div>
           </Card>
@@ -216,28 +219,30 @@ function LeaderboardPanel({ presentation }: { presentation: PresentationSummary 
   })
   const entries = board.data?.leaderboard ?? []
   return (
-    <Card className="space-y-3 self-start">
+    <Card className="space-y-5 self-start">
       <div className="flex items-center justify-between">
-        <h2 className="font-medium">Leaderboard</h2>
+        <h2 className="kicker">Leaderboard</h2>
         <Button variant="ghost" onClick={board.reload}>
-          Refresh
+          <Icon name="rotate-ccw" /> Refresh
         </Button>
       </div>
       {entries.length === 0 ? (
         <p className="text-sm text-slate-500">No points yet.</p>
       ) : (
-        <ol className="space-y-1 text-sm">
+        <ol className="max-h-[28rem] divide-y-[1.5px] divide-white overflow-auto text-sm">
           {entries.map((entry, index) => (
             // biome-ignore lint/suspicious/noArrayIndexKey: names can repeat
-            <li key={index} className="flex gap-2">
-              <span className="w-8 text-right text-slate-400 tabular-nums">{entry.rank}.</span>
-              <span className="flex-1 truncate">{entry.name}</span>
-              <span className="font-medium tabular-nums">{entry.points.toLocaleString("en")}</span>
+            <li key={index} className="flex items-center gap-3.5 py-2.5 first:pt-0 last:pb-0">
+              <Rank rank={entry.rank} />
+              <span className="flex-1 truncate font-headline text-slate-800">{entry.name}</span>
+              <span className="font-display text-base font-medium text-pn tabular-nums">
+                {entry.points.toLocaleString("en")}
+              </span>
             </li>
           ))}
         </ol>
       )}
-      <p className="text-xs text-slate-500">
+      <p className="border-t-[1.5px] border-white pt-4 text-xs text-slate-500">
         API: <code className="break-all">GET /api/v1/presentations/{presentation.slug}/leaderboard</code>
       </p>
     </Card>

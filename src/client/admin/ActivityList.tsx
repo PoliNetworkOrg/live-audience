@@ -1,8 +1,9 @@
 import { useState } from "react"
 import { Link, useLocation } from "wouter"
 import { api, useApi } from "../api.ts"
-import { Button, Card, Field, Input, Select } from "../ui.tsx"
-import { controlStage, useStage } from "./AdminLayout.tsx"
+import { Icon } from "../icons.tsx"
+import { Button, Card, Field, Input, Select, Tag } from "../ui.tsx"
+import { controlStage, PageHeader, useStage } from "./AdminLayout.tsx"
 
 export interface ActivitySummary {
   id: string
@@ -43,21 +44,28 @@ export function ActivityList() {
     .filter((group) => group.presentation || group.activities.length > 0)
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-xl font-semibold">Activities</h1>
+    <div className="space-y-10">
+      <PageHeader kicker="Live admin" title="Activities" />
       {types.data && presentations.data && (
         <NewActivity types={types.data} presentations={presentations.data} />
       )}
       {activities.data?.length === 0 && <p className="text-sm text-slate-500">No activities yet.</p>}
       {groups.map((group) => (
-        <section key={group.key ?? ""} className="space-y-2">
-          <h2 className="text-sm font-medium text-slate-500">
+        <section key={group.key ?? ""} className="space-y-4">
+          <h2 className="px-1 font-headline text-lg text-slate-800">
             {group.presentation ? (
-              <Link href={`/presentations/${group.presentation.id}`} className="hover:underline">
-                {group.presentation.title} →
+              <Link
+                href={`/presentations/${group.presentation.id}`}
+                className="group inline-flex items-center gap-2 hover:text-pn"
+              >
+                {group.presentation.title}
+                <Icon
+                  name="arrow-right"
+                  className="size-4 text-sky-700 transition group-hover:translate-x-0.5"
+                />
               </Link>
             ) : (
-              "Not in a presentation"
+              <span className="text-slate-500">Not in a presentation</span>
             )}
           </h2>
           <ActivityRows activities={group.activities} types={types.data ?? []} />
@@ -76,32 +84,34 @@ export function ActivityRows({
 }) {
   const stage = useStage()
   return (
-    <Card className="divide-y divide-slate-100 p-0">
-      {activities.length === 0 && <p className="p-4 text-sm text-slate-500">No activities yet.</p>}
+    <Card className="divide-y-[1.5px] divide-white p-0">
+      {activities.length === 0 && <p className="px-6 py-5 text-sm text-slate-500">No activities yet.</p>}
       {activities.map((a) => {
         const onStage = stage?.activity?.id === a.id
         const label = types.find((t) => t.type === a.type)?.label ?? a.type
         return (
-          <div key={a.id} className="flex items-center gap-3 px-4 py-3">
-            <div className="min-w-0 flex-1">
-              <Link href={`/activities/${a.id}`} className="font-medium hover:underline">
+          <div key={a.id} className="flex items-center gap-4 px-6 py-4">
+            <div className="min-w-0 flex-1 space-y-1.5">
+              <Link
+                href={`/activities/${a.id}`}
+                className="block truncate font-headline text-slate-800 hover:text-pn"
+              >
                 {a.title}
               </Link>
-              <div className="text-xs text-slate-500">
-                {label} · <code>{a.slug}</code>
+              <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                <Tag>{label}</Tag>
+                <code className="font-mono">{a.slug}</code>
               </div>
             </div>
             {onStage && (
-              <span className="rounded bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-800">
-                on stage · {stage?.status}
-              </span>
+              <Tag tone={stage?.status === "open" ? "live" : "warn"}>on stage · {stage?.status}</Tag>
             )}
             <Button
               variant={onStage ? "secondary" : "success"}
               disabled={onStage && stage?.status === "open"}
               onClick={() => void controlStage({ activity: a.id, status: "open" })}
             >
-              ▶ Open
+              <Icon name="play" /> Open
             </Button>
           </div>
         )
@@ -152,7 +162,7 @@ export function NewActivity({
   return (
     <Card className="@container">
       <form
-        className="grid items-end gap-3 @lg:grid-cols-2 @4xl:grid-cols-[10rem_1fr_1fr_12rem_auto]"
+        className="grid items-end gap-x-4 gap-y-5 @lg:grid-cols-2 @4xl:grid-cols-[13rem_1fr_1fr_12rem_auto]"
         onSubmit={(e) => {
           e.preventDefault()
           void create()
@@ -177,10 +187,10 @@ export function NewActivity({
           <PresentationSelect presentations={presentations} value={presentation} onChange={setPresentation} />
         </Field>
         <Button type="submit" variant="primary" disabled={!title.trim() || !effectiveSlug} className="py-2">
-          Create
+          <Icon name="plus" /> Create
         </Button>
       </form>
-      {error && <p className="mt-2 text-sm text-rose-600">{error}</p>}
+      {error && <p className="mt-3 text-sm text-rose-600">{error}</p>}
     </Card>
   )
 }

@@ -1,13 +1,81 @@
-import { type CSSProperties, type ReactNode, useEffect, useState } from "react"
+import { type ButtonHTMLAttributes, type CSSProperties, type ReactNode, useEffect, useState } from "react"
+import { Icon, type IconName } from "./icons.tsx"
 import { cx } from "./ui.tsx"
 
-/** Shared pieces of the audience side of activities: phones, dark background, big and friendly. */
+/** Shared pieces of the audience side of activities: phones, glass on light blue, big and friendly. */
+
+/** The question or prompt of an activity. */
+export function Question({ children }: { children: ReactNode }) {
+  return (
+    <h2 className="font-display text-[1.75rem] leading-[1.15] font-medium tracking-tight text-balance text-slate-800">
+      {children}
+    </h2>
+  )
+}
+
+/** A short line of help under or around the controls. */
+export function Hint({ className, children }: { className?: string; children: ReactNode }) {
+  return <p className={cx("text-sm text-pretty text-slate-500", className)}>{children}</p>
+}
+
+/** Text and number inputs on phones. */
+export const audienceField =
+  "w-full rounded-2xl border-[1.5px] border-white bg-white/75 px-5 py-4 text-lg text-slate-900 shadow-[inset_0_1px_3px_rgb(17_86_174/0.1)] outline-none transition placeholder:text-slate-400 focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-400/20 disabled:opacity-60"
+
+/** The big pill that sends an answer. */
+export function SubmitButton({ className, ...props }: ButtonHTMLAttributes<HTMLButtonElement>) {
+  return (
+    <button
+      type="button"
+      className={cx(
+        "w-full rounded-full bg-pn px-6 py-4 font-headline text-lg font-medium text-white shadow-[0_16px_32px_-16px_rgb(17_86_174/0.8)] transition hover:bg-pn-deep active:scale-[0.98] disabled:bg-pn/35 disabled:shadow-none disabled:active:scale-100",
+        className,
+      )}
+      {...props}
+    />
+  )
+}
+
+/** One of the answers of a choice: a glass row that turns solid blue when picked. */
+export function ChoiceButton({
+  selected,
+  shape = "circle",
+  className,
+  children,
+  ...props
+}: ButtonHTMLAttributes<HTMLButtonElement> & { selected: boolean; shape?: "circle" | "square" }) {
+  return (
+    <button
+      type="button"
+      aria-pressed={selected}
+      className={cx(
+        "flex w-full items-center gap-4 rounded-[20px] border-[1.5px] px-5 py-4 text-left font-headline text-[1.0625rem] transition active:scale-[0.98] disabled:cursor-default disabled:active:scale-100",
+        selected
+          ? "border-pn bg-pn text-white shadow-[0_18px_36px_-18px_rgb(17_86_174/0.9)]"
+          : "glass text-slate-800 hover:bg-white/80 disabled:opacity-55 disabled:hover:bg-transparent",
+        className,
+      )}
+      {...props}
+    >
+      <span
+        className={cx(
+          "flex size-6 shrink-0 items-center justify-center border-[1.5px] text-sm",
+          shape === "circle" ? "rounded-full" : "rounded-md",
+          selected ? "border-white bg-white text-pn" : "border-slate-300 bg-white/60",
+        )}
+      >
+        {selected && <Icon name="check" strokeWidth={3} />}
+      </span>
+      <span className="min-w-0 break-words">{children}</span>
+    </button>
+  )
+}
 
 /** Tells audience members the name results will show for them, taken from their account. */
 export function ShownAs({ name }: { name: string }) {
   return (
-    <p className="text-sm text-sky-100">
-      You take part as <span className="font-semibold text-white">{name}</span>, the name on your PoliNetwork
+    <p className="text-sm text-pretty text-slate-500">
+      You take part as <b className="font-semibold text-slate-800">{name}</b>, the name on your PoliNetwork
       account. It can be shown on the presentation.
     </p>
   )
@@ -19,9 +87,9 @@ export function useOneOf<T>(options: readonly T[]): T {
 }
 
 const tones = {
-  win: "border-amber-300/60 bg-gradient-to-br from-amber-300/25 to-pink-400/20",
-  lose: "border-rose-300/30 bg-rose-400/10",
-  info: "border-white/15 bg-white/8",
+  win: { card: "glass-tint", badge: "bg-pn text-white shadow-[0_0_0_8px_rgb(81_162_255/0.18)]" },
+  lose: { card: "glass", badge: "bg-rose-600/10 text-rose-600" },
+  info: { card: "glass", badge: "bg-white/80 text-sky-700 ring-[1.5px] ring-white" },
 }
 
 /**
@@ -30,13 +98,13 @@ const tones = {
  */
 export function Verdict({
   tone,
-  emoji,
+  icon,
   title,
   points,
   children,
 }: {
   tone: keyof typeof tones
-  emoji: string
+  icon: IconName
   title: string
   /** Points scored in this activity, shown as a badge. */
   points?: number | null
@@ -52,24 +120,27 @@ export function Verdict({
     <div
       key={`${tone}-${title}`}
       role="status"
-      className={cx("animate-pop-in rounded-3xl border px-5 py-6 text-center", tones[tone])}
+      className={cx("animate-pop-in px-7 py-8 text-center", tones[tone].card)}
     >
       <div
         aria-hidden
         className={cx(
-          "mb-2 text-6xl",
+          "mx-auto mb-5 flex size-14 items-center justify-center rounded-full text-[1.75rem]",
+          tones[tone].badge,
           tone === "win" ? "animate-tada" : tone === "lose" ? "animate-wobble" : "animate-float",
         )}
       >
-        {emoji}
+        <Icon name={icon} />
       </div>
-      <p className="text-2xl font-bold tracking-tight text-white">{title}</p>
-      {children && <div className="mt-2 text-pretty text-sky-100/85">{children}</div>}
+      <p className="font-display text-2xl font-medium tracking-tight text-balance text-slate-800">{title}</p>
+      {children && <div className="mt-3 text-pretty text-slate-600 [&_b]:text-slate-800">{children}</div>}
       {points != null && (
         <p
           className={cx(
-            "mt-3 inline-block rounded-full px-3 py-1 text-sm font-bold tabular-nums",
-            points > 0 ? "bg-amber-300 text-brand-950" : "bg-white/10 text-white/70",
+            "mt-5 inline-block rounded-full px-4 py-1 font-display text-sm font-semibold tabular-nums",
+            points > 0
+              ? "bg-pn text-white"
+              : "bg-white/70 text-slate-500 ring-[1.5px] ring-slate-300 ring-inset",
           )}
         >
           +{points.toLocaleString("en")} points
@@ -80,7 +151,8 @@ export function Verdict({
   )
 }
 
-const confettiColors = ["#fcd34d", "#f472b6", "#7dd3fc", "#86efac", "#c4b5fd", "#ffffff"]
+// The palette of the slides: blues, sky, a touch of emerald and amber.
+const confettiColors = ["#1156ae", "#51a2ff", "#74d4ff", "#0069a8", "#00d492", "#ffb900", "#ffffff"]
 
 function Confetti() {
   const [pieces] = useState(() =>
@@ -101,7 +173,7 @@ function Confetti() {
         <span
           key={piece.id}
           className={cx(
-            "animate-confetti absolute -top-4 block h-3 w-2",
+            "animate-confetti absolute -top-4 block h-3 w-2 rounded-[2px] shadow-sm",
             piece.round && "size-2.5 rounded-full",
           )}
           style={
@@ -123,8 +195,14 @@ function Confetti() {
 /** A little "saved" line that pops every time `id` changes. */
 export function Saved({ id, children }: { id: unknown; children: ReactNode }) {
   return (
-    <p key={JSON.stringify(id)} className="animate-pop-in text-center text-sm font-medium text-emerald-300">
-      {children}
+    <p
+      key={JSON.stringify(id)}
+      className="animate-pop-in flex items-center justify-center gap-2 text-center text-sm font-medium text-emerald-700"
+    >
+      <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-xs text-white">
+        <Icon name="check" strokeWidth={3} />
+      </span>
+      <span className="text-pretty">{children}</span>
     </p>
   )
 }
@@ -136,37 +214,49 @@ export interface LeaderboardView {
   players: number
 }
 
-const medals: Record<number, string> = { 1: "🥇", 2: "🥈", 3: "🥉" }
+/** A rank in a rounded square, as the numbers of the agenda on the slides; first place is filled. */
+export function Rank({ rank }: { rank: number }) {
+  return (
+    <span
+      className={cx(
+        "flex size-9 shrink-0 items-center justify-center rounded-xl font-display text-base font-medium tabular-nums",
+        rank === 1 ? "bg-pn text-white" : "bg-blue-400/15 text-blue-700",
+      )}
+    >
+      {rank}
+    </span>
+  )
+}
 
 /** The current presentation's top 3 and the viewer's own place. */
 export function Leaderboard({ board }: { board: LeaderboardView }) {
   return (
-    <div className="animate-pop-in space-y-3 rounded-3xl border border-white/15 bg-white/8 p-5 text-left">
+    <div className="glass animate-pop-in space-y-5 p-6 text-left">
       <div className="flex items-baseline justify-between gap-3">
-        <h2 className="font-semibold text-white">Leaderboard</h2>
-        <span className="truncate text-xs text-sky-100/60">{board.title}</span>
+        <h2 className="kicker">Leaderboard</h2>
+        <span className="truncate text-xs text-slate-500">{board.title}</span>
       </div>
       {board.top.length === 0 ? (
-        <p className="text-sm text-sky-100/75">No points yet: the first game is coming up!</p>
+        <p className="text-sm text-slate-600">No points yet: the first game is coming up.</p>
       ) : (
-        <ol className="space-y-2">
+        <ol className="divide-y-[1.5px] divide-white/85">
           {board.top.map((entry, index) => (
             <li
               // biome-ignore lint/suspicious/noArrayIndexKey: names can repeat
               key={index}
               style={{ animationDelay: `${index * 80}ms` }}
-              className="animate-pop-in flex items-center gap-3 rounded-2xl bg-white/8 px-4 py-3"
+              className="animate-pop-in flex items-center gap-3.5 py-3 first:pt-0 last:pb-0"
             >
-              <span className="w-7 text-center text-2xl">{medals[entry.rank] ?? `#${entry.rank}`}</span>
-              <span className="min-w-0 flex-1 truncate font-medium text-white">{entry.name}</span>
-              <span className="font-semibold text-amber-200 tabular-nums">
+              <Rank rank={entry.rank} />
+              <span className="min-w-0 flex-1 truncate font-headline text-slate-800">{entry.name}</span>
+              <span className="font-display text-lg font-medium text-pn tabular-nums">
                 {entry.points.toLocaleString("en")}
               </span>
             </li>
           ))}
         </ol>
       )}
-      <MyPlace board={board} />
+      <MyPlace board={board} className="border-t-[1.5px] border-white/85 pt-5" />
     </div>
   )
 }
@@ -175,15 +265,15 @@ export function Leaderboard({ board }: { board: LeaderboardView }) {
 export function MyPlace({ board, className }: { board: LeaderboardView; className?: string }) {
   const { me, players } = board
   return (
-    <p className={cx("text-center text-sm text-sky-100", className)}>
+    <p className={cx("text-center text-sm text-slate-600", className)}>
       {me ? (
         <>
-          You're <b className="text-white">#{me.rank}</b> of {players} with{" "}
-          <b className="text-amber-200 tabular-nums">{me.points.toLocaleString("en")}</b> points
-          {me.rank === 1 ? " 👑" : me.rank <= 3 ? " 🔥" : ""}
+          You're <b className="font-semibold text-slate-800">#{me.rank}</b> of {players} with{" "}
+          <b className="font-display font-semibold text-pn tabular-nums">{me.points.toLocaleString("en")}</b>{" "}
+          points{me.rank === 1 && " 👑"}
         </>
       ) : (
-        "Play the next game to get on the board!"
+        "Play the next game to get on the board."
       )}
     </p>
   )
