@@ -13,6 +13,12 @@ export interface StageInfo {
   presentation: { id: string; slug: string; title: string } | null
 }
 
+/** People with the audience page open, and answers to what is on stage. */
+interface AudienceCounts {
+  connected: number
+  answered: number
+}
+
 const StageContext = createContext<StageInfo | null>(null)
 
 /** The live stage, shared by every admin page through a single event stream. */
@@ -55,7 +61,11 @@ export function AdminLayout({ children }: { children: ReactNode }) {
   const me = useMe()
   const user = me.data?.user
   const [stage, setStage] = useState<StageInfo | null>(null)
-  useEventStream(user?.isAdmin ? "/api/admin/events" : null, { stage: (s: StageInfo) => setStage(s) })
+  const [counts, setCounts] = useState<AudienceCounts | null>(null)
+  useEventStream(user?.isAdmin ? "/api/admin/events" : null, {
+    stage: (s: StageInfo) => setStage(s),
+    audience: (c: AudienceCounts) => setCounts(c),
+  })
 
   if (me.loading && !me.data) return null
   if (!user) {
@@ -114,7 +124,7 @@ export function AdminLayout({ children }: { children: ReactNode }) {
               </Button>
             </div>
           </div>
-          <StageBar stage={stage} />
+          <StageBar stage={stage} counts={counts} />
         </header>
         <main className="relative mx-auto max-w-6xl px-4 pt-10 pb-20">{children}</main>
       </div>
@@ -171,7 +181,7 @@ function NavLink({ href, icon, children }: { href: string; icon: IconName; child
   )
 }
 
-function StageBar({ stage }: { stage: StageInfo | null }) {
+function StageBar({ stage, counts }: { stage: StageInfo | null; counts: AudienceCounts | null }) {
   if (!stage) return null
   const open = stage.status === "open"
   return (
@@ -196,9 +206,22 @@ function StageBar({ stage }: { stage: StageInfo | null }) {
             {stage.activity.title}
           </Link>
           <Tag tone={open ? "live" : "warn"}>{open ? "open" : "closed"}</Tag>
+          {counts && (
+            <span className="text-slate-600 tabular-nums" title="Answers to what is on stage">
+              {counts.answered} answered
+            </span>
+          )}
         </>
       ) : (
         <span className="text-slate-500">nothing, the audience sees the idle screen</span>
+      )}
+      {counts && (
+        <span
+          className="flex items-center gap-1.5 text-slate-600 tabular-nums [&>svg]:size-4"
+          title="People with the audience page open"
+        >
+          <Icon name="users" /> {counts.connected} connected
+        </span>
       )}
       {stage.presentation && (
         <Link

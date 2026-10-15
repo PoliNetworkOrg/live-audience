@@ -128,6 +128,35 @@ describe("points", () => {
     expect(store.getActivity(estimate.id)?.presentationId).toBeNull()
   })
 
+  it("leave the leaderboard while their activity does not count towards it", () => {
+    const { store, person } = setup()
+    const talk = store.createPresentation({ title: "Welcome talk", slug: "welcome" })
+    const estimate = store.createActivity({
+      type: "number-estimate",
+      title: "Lanyards",
+      slug: "lanyards",
+      presentationId: talk.id,
+    })
+    store.updateActivity(estimate.id, { config: { prompt: "How many?", target: 100 } })
+    store.setStage(estimate.id, "open")
+    store.respond(estimate.id, person("a"), { number: 100 })
+    store.drawActivity(estimate.id)
+    expect(store.getLeaderboard("welcome").leaderboard).toEqual([{ rank: 1, name: "Name a", points: 1000 }])
+
+    const changes: string[] = []
+    store.events.on("leaderboard", (id) => changes.push(id))
+    store.updateActivity(estimate.id, { countsToLeaderboard: false })
+    expect(changes).toEqual([talk.id])
+    expect(store.getLeaderboard("welcome").leaderboard).toEqual([])
+    expect(store.getAudienceLeaderboard("a")?.me).toBeNull()
+    // The phone still learns what it scored in the game itself.
+    expect(store.getAudienceOutcome(estimate.id, "a")?.points).toBe(1000)
+    expect(store.getAudienceStage().activity).toMatchObject({ countsToLeaderboard: false })
+
+    store.updateActivity(estimate.id, { countsToLeaderboard: true })
+    expect(store.getLeaderboard("welcome").leaderboard).toHaveLength(1)
+  })
+
   it("are served to presentations and phones without account ids", async () => {
     const { store, person } = setup()
     const talk = store.createPresentation({ title: "Talk", slug: "talk" })

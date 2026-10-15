@@ -33,6 +33,10 @@ export interface Activity {
   config: unknown
   /** The presentation it belongs to, whose leaderboard its points count towards. */
   presentationId: string | null
+  /** Only Soci (and admins) may answer. Otherwise anyone signed in with a PoliNetwork account may. */
+  membersOnly: boolean
+  /** Whether its points add up to the presentation's leaderboard. */
+  countsToLeaderboard: boolean
   createdAt: number
   updatedAt: number
 }
@@ -77,7 +81,22 @@ export interface Stage {
 export interface AudienceStage {
   status: StageStatus
   changedAt: number
-  activity: { id: string; type: string; config: unknown } | null
+  activity: {
+    id: string
+    type: string
+    config: unknown
+    membersOnly: boolean
+    countsToLeaderboard: boolean
+  } | null
+}
+
+/** How many people have the audience page open, and how many answered what is on stage. */
+export interface AudienceCounts {
+  connected: number
+  /** Answers to the activity on stage, 0 when nothing is. */
+  answered: number
+  /** The slug of the activity on stage, which `answered` counts. */
+  activity: string | null
 }
 
 /**
@@ -101,6 +120,8 @@ export interface StoreEvents {
   results: [activityId: string]
   /** Points in this presentation changed. */
   leaderboard: [presentationId: string]
+  /** Someone opened or closed the audience page. */
+  presence: []
 }
 
 interface ActivityRow {
@@ -110,6 +131,8 @@ interface ActivityRow {
   title: string
   config: string
   presentation_id: string | null
+  members_only: number
+  counts_to_leaderboard: number
   created_at: number
   updated_at: number
 }
@@ -137,6 +160,8 @@ export const SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
 export class Store {
   readonly events = new EventEmitter<StoreEvents>()
   private readonly db: Database
+  /** Open audience pages per account: several tabs of one person count once. */
+  private readonly present = new Map<string, number>()
 
   constructor(db: Database) {
     this.db = db
@@ -176,6 +201,8 @@ export class Store {
     title: string
     slug: string
     presentationId?: string | null
+    membersOnly?: boolean
+    countsToLeaderboard?: boolean
   }): Activity {
     const definition = getActivityDefinition(input.type)
     if (!definition) throw new StoreError(400, `Unknown activity type "${input.type}"`)
@@ -188,12 +215,14 @@ export class Store {
       title: input.title,
       config: definition.defaultConfig(),
       presentationId: input.presentationId ? this.requirePresentation(input.presentationId).id : null,
+      membersOnly: input.membersOnly ?? false,
+      countsToLeaderboard: input.countsToLeaderboard ?? true,
       createdAt: now,
       updatedAt: now,
     }
     this.db
       .prepare(
-        "INSERT INTO activities (id, slug, type, title, config, presentation_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO activities (id, slug, type, title, config, presentation_id, members_only, counts_to_leaderboard, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
       )
       .run(
         activity.id,
@@ -202,6 +231,8 @@ export class Store {
         activity.title,
         JSON.stringify(activity.config),
         activity.presentationId,
+        activity.membersOnly ? 1 : 0,
+        activity.countsToLeaderboard ? 1 : 0,
         now,
         now,
       )
@@ -210,7 +241,15 @@ export class Store {
 
   updateActivity(
     id: string,
-    patch: { type?: string; title?: string; slug?: string; config?: unknown; presentationId?: string | null },
+    patch: {
+      type?: string
+      title?: string
+      slug?: string
+      config?: unknown
+      presentationId?: string | null
+      membersOnly?: boolean
+      countsToLeaderboard?: boolean
+    },
   ): Activity {
     const activity = this.requireActivity(id)
     const typeChanged = patch.type !== undefined && patch.type !== activity.type
@@ -226,15 +265,14 @@ export class Store {
     ) {
       throw new StoreError(409, "Reset the answers before changing the activity type")
     }
-    if (
-      patch.config !== undefined &&
-      activity.type === memoryQuiz.type &&
-      this.getSetting(`quiz-draw:${activity.id}`)
-    ) {
+    // The admin page sends the config along with every save, e.g. of the toggles: only edits count.
+    const configChanged =
+      patch.config !== undefined && JSON.stringify(patch.config) !== JSON.stringify(activity.config)
+    if (configChanged && activity.type === memoryQuiz.type && this.getSetting(`quiz-draw:${activity.id}`)) {
       throw new StoreError(409, "Reset this quiz before editing its question or answers")
     }
     if (
-      patch.config !== undefined &&
+      configChanged &&
       activity.type === numberEstimate.type &&
       (this.listResponses(activity.id).length || this.getSetting(`number-draw:${activity.id}`))
     ) {
@@ -262,11 +300,13 @@ export class Store {
       slug: patch.slug ?? activity.slug,
       config,
       presentationId,
+      membersOnly: patch.membersOnly ?? activity.membersOnly,
+      countsToLeaderboard: patch.countsToLeaderboard ?? activity.countsToLeaderboard,
       updatedAt: Date.now(),
     }
     this.db
       .prepare(
-        "UPDATE activities SET type = ?, title = ?, slug = ?, config = ?, presentation_id = ?, updated_at = ? WHERE id = ?",
+        "UPDATE activities SET type = ?, title = ?, slug = ?, config = ?, presentation_id = ?, members_only = ?, counts_to_leaderboard = ?, updated_at = ? WHERE id = ?",
       )
       .run(
         updated.type,
@@ -274,15 +314,19 @@ export class Store {
         updated.slug,
         JSON.stringify(updated.config),
         updated.presentationId,
+        updated.membersOnly ? 1 : 0,
+        updated.countsToLeaderboard ? 1 : 0,
         updated.updatedAt,
         updated.id,
       )
     if (this.getStage().activityId === updated.id) this.events.emit("stage", this.getStage())
     this.events.emit("results", updated.id)
-    // Its points move with it.
+    // Its points move with it, or leave the leaderboard.
     if (presentationId !== activity.presentationId) {
       if (activity.presentationId) this.events.emit("leaderboard", activity.presentationId)
       if (presentationId) this.events.emit("leaderboard", presentationId)
+    } else if (presentationId && updated.countsToLeaderboard !== activity.countsToLeaderboard) {
+      this.events.emit("leaderboard", presentationId)
     }
     return updated
   }
@@ -380,7 +424,7 @@ export class Store {
       .prepare(
         `SELECT s.user_id AS userId, MAX(s.user_name) AS name, SUM(s.points) AS points
          FROM scores s JOIN activities a ON a.id = s.activity_id
-         WHERE a.presentation_id = ?
+         WHERE a.presentation_id = ? AND a.counts_to_leaderboard = 1
          GROUP BY s.user_id
          ORDER BY points DESC, name`,
       )
@@ -821,6 +865,8 @@ export class Store {
               config: definition.audienceConfig
                 ? definition.audienceConfig(activity.config)
                 : activity.config,
+              membersOnly: activity.membersOnly,
+              countsToLeaderboard: activity.countsToLeaderboard,
             }
           : null,
     }
@@ -830,6 +876,36 @@ export class Store {
     this.setSetting("stage", stage)
     this.events.emit("stage", stage)
     return stage
+  }
+
+  // ---- presence -------------------------------------------------------------------------
+
+  /** Counts `userId` as having the audience page open until the returned function is called. */
+  join(userId: string): () => void {
+    this.present.set(userId, (this.present.get(userId) ?? 0) + 1)
+    this.events.emit("presence")
+    let left = false
+    return () => {
+      if (left) return
+      left = true
+      const remaining = (this.present.get(userId) ?? 1) - 1
+      if (remaining > 0) this.present.set(userId, remaining)
+      else this.present.delete(userId)
+      this.events.emit("presence")
+    }
+  }
+
+  getAudienceCounts(): AudienceCounts {
+    const activityId = this.getStage().activityId
+    const activity = activityId ? this.getActivity(activityId) : undefined
+    const answered = activity
+      ? (
+          this.db
+            .prepare("SELECT COUNT(*) AS answered FROM responses WHERE activity_id = ?")
+            .get(activity.id) as { answered: number }
+        ).answered
+      : 0
+    return { connected: this.present.size, answered, activity: activity?.slug ?? null }
   }
 
   // ---- api key ---------------------------------------------------------------------------
@@ -887,6 +963,8 @@ function toActivity(row: ActivityRow): Activity {
     title: row.title,
     config: JSON.parse(row.config),
     presentationId: row.presentation_id,
+    membersOnly: row.members_only === 1,
+    countsToLeaderboard: row.counts_to_leaderboard === 1,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }

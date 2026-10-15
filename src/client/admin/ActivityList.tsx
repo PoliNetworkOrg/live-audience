@@ -21,6 +21,8 @@ export interface ActivitySummary {
   presentation: string | null
   /** How many people answered. */
   answers: number
+  membersOnly: boolean
+  countsToLeaderboard: boolean
 }
 
 export interface ActivityType {
@@ -163,6 +165,8 @@ export function ActivityRows({
               <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
                 <Tag>{label}</Tag>
                 <code className="font-mono">{a.slug}</code>
+                {a.membersOnly && <Tag>Soci only</Tag>}
+                {!a.countsToLeaderboard && <Tag>Off the leaderboard</Tag>}
                 {answerCount(a.answers) && <span>· {answerCount(a.answers)}</span>}
               </div>
             </div>

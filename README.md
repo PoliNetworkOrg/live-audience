@@ -2,7 +2,7 @@
 
 Live audience interaction (polls, word clouds, a prize wheel, a number lottery and memory quizzes) for PoliNetwork presentations.
 
-- **Audience page** (`/`): Soci sign in with the PoliNetwork IdP and see whatever is "on stage", usually nothing. When the presenter opens an activity it appears there, live.
+- **Audience page** (`/`): people sign in with their PoliNetwork account and see whatever is "on stage", usually nothing. When the presenter opens an activity it appears there, live. Everyone can play, except in activities marked **Soci only**. Every activity fits one phone screen: once answers close the verdict comes first, and the right answer and the person's own one wait behind "Show" buttons.
 - **Admin page** (`/admin`): create and edit activities, group them into presentations, put them on stage by hand, preview results and leaderboards, manage the API key. Reserved to an IdP permission.
 - **Presentation API** (`/api/v1`): one global API key lets an HTML presentation open/close activities as slides change and read live results to draw its own charts.
 
@@ -28,6 +28,8 @@ it was changed.
 | Number lottery | 1 − distance / 100 from the drawn number |
 
 Polls, word clouds, purchase interest and the wheel have no right answer and score nothing.
+An activity with **Counts towards the leaderboard** off (Admin, activity page) still scores, and
+phones still show the points, but they stay off the leaderboard; switching it back adds them again.
 Leaderboards export the account names of the people on them, never account ids.
 
 ## Stack
@@ -70,7 +72,7 @@ The app is a regular OIDC client of `auth.polinetwork.org`.
 
    For local development against a local IdP (`http://localhost:3000`), register a separate **native** app with redirect URI `http://localhost:5173/auth/callback`: the IdP refuses localhost redirects for web apps.
 2. **Admin permission**: at `<IdP>/access`, create the permission `live-audience:admin` and attach it to the role(s) that should run presentations (or set `ADMIN_PERMISSION` to an existing one).
-3. **Audience**: by default anyone with the `socio` role may take part, which also includes custom roles inheriting from Socio. Change it with `AUDIENCE_ROLE`. Admins can always take part.
+3. **Audience**: anyone with a PoliNetwork account may take part. Activities marked **Soci only** (Admin, activity page) take answers only from people with the `socio` role, which also includes custom roles inheriting from Socio. Change the role with `AUDIENCE_ROLE`. Admins can always take part.
 
 Roles and permissions are read from the ID token (`polinetwork_roles`, `polinetwork_permissions`) at sign-in and kept for the session (`SESSION_DAYS`, default 7). Someone who stops being a Socio keeps access until their session ends; signing out and in again refreshes it.
 
@@ -83,7 +85,7 @@ Roles and permissions are read from the ID token (`polinetwork_roles`, `polinetw
 | `DATABASE_PATH` | `data/live-audience.db` | `/data/live-audience.db` in Docker |
 | `OIDC_ISSUER` | | `https://auth.polinetwork.org/api/auth` |
 | `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET` | | From the IdP registration |
-| `AUDIENCE_ROLE` | `socio` | IdP role needed to take part |
+| `AUDIENCE_ROLE` | `socio` | IdP role needed to answer activities marked Soci only |
 | `ADMIN_PERMISSION` | `live-audience:admin` | IdP permission needed for `/admin` |
 | `SESSION_DAYS` | `7` | |
 | `DEV_LOGIN` | `false` | Local fake sign-in |
@@ -127,6 +129,7 @@ Admin → API shows the key, a ready-to-paste snippet and the endpoint list. The
   await live.startPresentation("welcome-talk")  // or just open one of its activities
   await live.leaderboard("welcome-talk")        // { leaderboard: [{ rank, name, points }] }
   live.onLeaderboard(({ leaderboard }) => drawPodium(leaderboard))  // the running presentation
+  live.onAudience(({ connected, answered }) => drawCounter(connected, answered))  // who is here, who answered
   await live.endPresentation()
 </script>
 ```
@@ -141,13 +144,14 @@ Plain HTTP: `Authorization: Bearer <key>` (or `?key=`, which `EventSource` needs
 | `POST /api/v1/stage` | `{ "activity": "<slug>", "status": "open" \| "closed" }`, status defaults to open |
 | `POST /api/v1/stage/open` · `/close` · `/clear` | |
 | `POST /api/v1/stage/presentation` | `{ "presentation": "<slug>" \| null }`: start or end a presentation |
-| `GET /api/v1/activities` | Every activity with its config and how many answered it |
+| `GET /api/v1/activities` | Every activity with its config, `membersOnly`, `countsToLeaderboard` and how many answered it |
 | `GET /api/v1/activities/:slug/results` | `{ id, slug, type, title, results }` |
 | `POST /api/v1/activities/:slug/reset` | Delete all answers |
 | `POST /api/v1/activities/:slug/draw` | Draw a lottery, reveal a real number or a quiz; outcome, winner and points persist |
+| `GET /api/v1/audience` | `{ connected, answered, activity }`: people with the audience page open (several tabs count once), and answers to the activity on stage (`activity` is its slug, null with nothing on stage) |
 | `GET /api/v1/presentations` | Every presentation |
 | `GET /api/v1/presentations/:slug/leaderboard` | `{ id, slug, title, leaderboard: [{ rank, name, points }] }`, best first, ties share a rank |
-| `GET /api/v1/events[?activity=<slug>]` | SSE: `stage` events, `results` for what is on stage (or for that activity), `leaderboard` for the running presentation |
+| `GET /api/v1/events[?activity=<slug>]` | SSE: `stage` events, `results` for what is on stage (or for that activity), `leaderboard` for the running presentation, `audience` (as `GET /audience`) whenever people connect, leave or answer |
 
 Poll results look like `{ question, totalVoters, options: [{ id, label, votes, percent }] }`. Results never include who answered.
 
@@ -198,8 +202,8 @@ and the fastest correct answer wins. With `scoring: "first"` (and for quizzes sa
 existed) the first correct answer wins, scores and closes the quiz immediately.
 Optional `answerMode: "choice" | "order"` and `choices: string[]` add multiple choice
 and ordering (2–4 choices or 2–6 distinct ordered items). Choices are public; acceptedAnswers stay private.
-Order answers join every item exactly once with ` → `. The audience can move items up
-and down with keyboard accessible buttons. Legacy free-text config remains unchanged.
+Order answers join every item exactly once with ` → `. The audience drags the items into
+order with a finger or the mouse, or focuses one and moves it with the arrow keys. Legacy free-text config remains unchanged.
 Case, Unicode/whitespace variants and trailing `. ! ?` are ignored; guessing several possible
 answers in one string does not match. Wrong answers can be updated while the quiz is open.
 

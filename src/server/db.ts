@@ -52,6 +52,10 @@ const migrations = [
     PRIMARY KEY (activity_id, user_id)
   );
   `,
+  `
+  ALTER TABLE activities ADD COLUMN members_only INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE activities ADD COLUMN counts_to_leaderboard INTEGER NOT NULL DEFAULT 1;
+  `,
 ]
 
 export type Database = DatabaseSync

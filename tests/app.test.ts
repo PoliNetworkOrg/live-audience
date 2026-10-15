@@ -65,7 +65,7 @@ describe("a word cloud, driven by a presentation", () => {
   it("validates free answers, replaces them, publishes counts and supports close/reset", async () => {
     const created = await call("/api/admin/activities", {
       as: "admin",
-      body: { type: "word-cloud", title: "Gadgets", slug: "gadget-ideas" },
+      body: { type: "word-cloud", title: "Gadgets", slug: "gadget-ideas", membersOnly: true },
     })
     expect(created.status).toBe(201)
     const { id } = await created.json()
@@ -124,7 +124,7 @@ describe("wheel entries", () => {
   it("puts each member on the wheel once, under their IdP name, and closes entries", async () => {
     const created = await call("/api/admin/activities", {
       as: "admin",
-      body: { type: "wheel", title: "Draw", slug: "fortune-wheel" },
+      body: { type: "wheel", title: "Draw", slug: "fortune-wheel", membersOnly: true },
     })
     expect(created.status).toBe(201)
     const { id } = await created.json()
@@ -171,10 +171,26 @@ describe("access", () => {
     expect((await call("/api/admin/activities", { as: "admin" })).status).toBe(200)
   })
 
-  it("keeps the audience to members", async () => {
+  it("lets anyone signed in play, and only Soci answer activities marked Soci only", async () => {
     expect((await call("/api/audience/stage")).status).toBe(401)
-    expect((await call("/api/audience/stage", { as: "guest" })).status).toBe(403)
-    expect((await call("/api/audience/stage", { as: "socio" })).status).toBe(200)
+    expect((await call("/api/audience/stage", { as: "guest" })).status).toBe(200)
+    const { id } = await createPoll()
+    const key = store.getApiKey()
+    await call("/api/v1/stage", { key, body: { activity: "dinner" } })
+    const vote = (as: string) =>
+      call("/api/audience/respond", { as, body: { activityId: id, response: { choices: ["a"] } } })
+    // Open to everyone by default.
+    expect(await (await call("/api/audience/stage", { as: "guest" })).json()).toMatchObject({
+      activity: { id, membersOnly: false, countsToLeaderboard: true },
+    })
+    expect((await vote("guest")).status).toBe(200)
+    await call("/api/admin/activities/dinner", { as: "admin", method: "PATCH", body: { membersOnly: true } })
+    expect(await (await call("/api/audience/stage", { as: "guest" })).json()).toMatchObject({
+      activity: { id, membersOnly: true },
+    })
+    expect((await vote("guest")).status).toBe(403)
+    expect((await vote("socio")).status).toBe(200)
+    expect((await vote("admin")).status).toBe(200)
   })
 
   it("requires the current API key", async () => {

@@ -20,10 +20,14 @@ const createActivityBody = z.object({
   title: z.string().trim().min(1).max(200),
   slug: z.string().trim().min(1).max(80),
   presentationId: z.string().nullable().optional(),
+  membersOnly: z.boolean().optional(),
+  countsToLeaderboard: z.boolean().optional(),
 })
 const updateActivityBody = z.object({
   type: z.string().optional(),
   presentationId: z.string().nullable().optional(),
+  membersOnly: z.boolean().optional(),
+  countsToLeaderboard: z.boolean().optional(),
   title: z.string().trim().min(1).max(200).optional(),
   slug: z.string().trim().min(1).max(80).optional(),
   config: z.unknown().optional(),
@@ -100,20 +104,26 @@ export function createApp({ store, session }: { store: Store; session: Middlewar
     .get("/activities", (c) => {
       const answers = store.answerCounts()
       return c.json(
-        store.listActivities().map(({ id, slug, type, title, config, presentationId }) => ({
-          id,
-          slug,
-          type,
-          title,
-          config,
-          presentation: presentationId ? (store.getPresentation(presentationId)?.slug ?? null) : null,
-          answers: answers.get(id) ?? 0,
-        })),
+        store
+          .listActivities()
+          .map(({ id, slug, type, title, config, presentationId, membersOnly, countsToLeaderboard }) => ({
+            id,
+            slug,
+            type,
+            title,
+            config,
+            membersOnly,
+            countsToLeaderboard,
+            presentation: presentationId ? (store.getPresentation(presentationId)?.slug ?? null) : null,
+            answers: answers.get(id) ?? 0,
+          })),
       )
     })
     .get("/presentations", (c) =>
       c.json(store.listPresentations().map(({ id, slug, title }) => ({ id, slug, title }))),
     )
+    /** How many people have the audience page open, and how many answered what is on stage. */
+    .get("/audience", (c) => c.json(store.getAudienceCounts()))
     .get("/presentations/:id/leaderboard", (c) => c.json(store.getLeaderboard(c.req.param("id"))))
     .get("/activities/:id/results", (c) => c.json(store.getResults(c.req.param("id"))))
     .post("/activities/:id/draw", (c) => c.json(store.drawActivity(c.req.param("id"))))
@@ -125,7 +135,8 @@ export function createApp({ store, session }: { store: Store; session: Middlewar
      * Live feed: `stage` whenever the stage changes, `results` whenever an activity's results
      * change (at most a few times per second). Pass ?activity=<slug> to receive results for
      * that activity only; otherwise you get results for whatever is on stage. `leaderboard`
-     * follows the current presentation's points.
+     * follows the current presentation's points. `audience` counts who has the audience page
+     * open and who answered what is on stage.
      */
     .get("/events", (c) => {
       const only = c.req.query("activity")
@@ -137,9 +148,12 @@ export function createApp({ store, session }: { store: Store; session: Middlewar
         const leaderboard = throttleByKey(250, (id) => {
           if (store.getPresentation(id)) send("leaderboard", store.getLeaderboard(id))
         })
+        const audience = throttleByKey(250, () => send("audience", store.getAudienceCounts()))
+        const onPresence = () => audience.call("")
         let presentationId = store.getStage().presentationId
         const onStage = (stage: Stage) => {
           send("stage", describeStage(store, stage))
+          audience.call("")
           if (!onlyId && stage.activityId) results.call(stage.activityId)
           if (stage.presentationId && stage.presentationId !== presentationId)
             leaderboard.call(stage.presentationId)
@@ -150,21 +164,26 @@ export function createApp({ store, session }: { store: Store; session: Middlewar
         }
         const onResults = (id: string) => {
           if (onlyId ? id === onlyId : id === store.getStage().activityId) results.call(id)
+          if (id === store.getStage().activityId) audience.call("")
         }
         const stage = store.getStage()
         send("stage", describeStage(store, stage))
         const initial = onlyId ?? stage.activityId
         if (initial) send("results", store.getResults(initial))
         if (stage.presentationId) send("leaderboard", store.getLeaderboard(stage.presentationId))
+        send("audience", store.getAudienceCounts())
         store.events.on("stage", onStage)
         store.events.on("results", onResults)
         store.events.on("leaderboard", onLeaderboard)
+        store.events.on("presence", onPresence)
         return () => {
           results.cancel()
           leaderboard.cancel()
+          audience.cancel()
           store.events.off("stage", onStage)
           store.events.off("results", onResults)
           store.events.off("leaderboard", onLeaderboard)
+          store.events.off("presence", onPresence)
         }
       })
     })
@@ -181,12 +200,15 @@ export function createApp({ store, session }: { store: Store; session: Middlewar
 
   app.get("/api/me", (c) => c.json({ user: c.get("user") }))
 
+  // Anyone with a PoliNetwork account may play; activities marked members only take Soci alone.
   const audience = new Hono<AppEnv>()
-    .use(requireUser((u) => u.canParticipate || u.isAdmin))
+    .use(requireUser(() => true))
     .get("/stage", (c) => c.json(audienceView(store, c.get("user") as SessionUser)))
     .post("/respond", async (c) => {
       const user = c.get("user") as SessionUser
       const body = await parseBody(c, respondBody)
+      if (store.getActivity(body.activityId)?.membersOnly && !isMember(user))
+        throw new HTTPException(403, { message: "This one is reserved to Soci" })
       const response = store.respond(body.activityId, user, body.response)
       // The new stage comes along, so a winning answer shows as won without waiting for the event.
       return c.json({ response, stage: audienceView(store, user) })
@@ -200,9 +222,11 @@ export function createApp({ store, session }: { store: Store; session: Middlewar
           if (id === store.getStage().presentationId) onStage()
         }
         onStage()
+        const leave = store.join(user.id)
         store.events.on("stage", onStage)
         store.events.on("leaderboard", onLeaderboard)
         return () => {
+          leave()
           store.events.off("stage", onStage)
           store.events.off("leaderboard", onLeaderboard)
         }
@@ -255,6 +279,11 @@ export function createApp({ store, session }: { store: Store; session: Middlewar
   app.all("/api/*", (c) => c.json({ error: "Not found" }, 404))
 
   return app
+}
+
+/** Soci, and admins, who can always take part. */
+function isMember(user: SessionUser) {
+  return user.canParticipate || user.isAdmin
 }
 
 /** The stage as presentations and the admin see it: ids resolved to slugs. */

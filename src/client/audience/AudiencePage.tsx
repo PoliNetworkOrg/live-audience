@@ -1,7 +1,7 @@
 import { type ReactNode, useState } from "react"
 import { activityUIs } from "../../activities/ui-registry.ts"
 import { api, loginUrl, logout, type Me, useEventStream, useMe } from "../api.ts"
-import { Leaderboard, type LeaderboardView, MyPlace } from "../audience-ui.tsx"
+import { CountsToLeaderboard, Leaderboard, type LeaderboardView, MyPlace } from "../audience-ui.tsx"
 import { Backdrop, Orbit, Wordmark } from "../brand.tsx"
 import { Icon } from "../icons.tsx"
 import { cx } from "../ui.tsx"
@@ -9,7 +9,14 @@ import { cx } from "../ui.tsx"
 interface AudienceStage {
   status: "open" | "closed"
   changedAt: number
-  activity: { id: string; type: string; config: unknown } | null
+  activity: {
+    id: string
+    type: string
+    config: unknown
+    /** Only Soci may answer it. */
+    membersOnly: boolean
+    countsToLeaderboard: boolean
+  } | null
   myResponse: unknown
   outcome: { draw: object; youWon: boolean; points: number | null } | null
   /** The running presentation's points, if one is running. */
@@ -23,18 +30,17 @@ export function AudiencePage() {
   let content: ReactNode
   if (me.loading && !me.data) content = <Spinner />
   else if (!user) content = <SignIn />
-  else if (!user.canParticipate && !user.isAdmin) content = <NotAMember />
   else content = <Live me={user} />
 
   return (
     <div className="relative flex min-h-dvh flex-col text-slate-950">
       <Backdrop />
-      <header className="relative z-10 flex items-center justify-between gap-3 px-4 pt-[max(1.25rem,env(safe-area-inset-top))] pb-3 sm:px-5">
+      <header className="relative z-10 flex items-center justify-between gap-3 px-4 pt-[max(0.75rem,env(safe-area-inset-top))] pb-2 tall:pt-[max(1.25rem,env(safe-area-inset-top))] tall:pb-3 sm:px-5">
         {/* On the narrowest phones "Live" makes room for the menu. */}
         <Wordmark suffix="Live" className="shrink-0 max-[22.5rem]:[&>.kicker]:hidden" />
         {user && <UserMenu user={user} />}
       </header>
-      <main className="relative z-10 mx-auto flex w-full max-w-lg flex-1 flex-col justify-center px-5 pt-6 pb-[max(2rem,env(safe-area-inset-bottom))]">
+      <main className="relative z-10 mx-auto flex w-full max-w-lg flex-1 flex-col justify-center px-5 pt-2 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
         {content}
       </main>
     </div>
@@ -70,6 +76,14 @@ function Live({ me }: { me: Me }) {
   }
 
   const activity = stage.activity
+  if (activity.membersOnly && !me.canParticipate && !me.isAdmin) {
+    return (
+      <div key={activity.id} className="space-y-10">
+        <SociOnly />
+        {stage.leaderboard && <Leaderboard board={stage.leaderboard} />}
+      </div>
+    )
+  }
   const submit = async (response: unknown) => {
     try {
       const saved = await api<{ response: unknown; stage: AudienceStage }>("/api/audience/respond", {
@@ -84,19 +98,21 @@ function Live({ me }: { me: Me }) {
   }
 
   return (
-    <div key={activity.id} className="animate-pop-in space-y-7">
+    <div key={activity.id} className="animate-pop-in space-y-3 tall:space-y-4">
       <div className="flex items-center justify-between">
         <StatusPill open={stage.status === "open"} />
         <ConnectionDot connected={connected} />
       </div>
-      <ui.Audience
-        config={activity.config}
-        me={me}
-        outcome={stage.outcome}
-        response={stage.myResponse}
-        open={stage.status === "open"}
-        submit={submit}
-      />
+      <CountsToLeaderboard.Provider value={activity.countsToLeaderboard}>
+        <ui.Audience
+          config={activity.config}
+          me={me}
+          outcome={stage.outcome}
+          response={stage.myResponse}
+          open={stage.status === "open"}
+          submit={submit}
+        />
+      </CountsToLeaderboard.Provider>
       {/* Once answers are locked the activity itself explains why (too slow, closed…). */}
       {error && stage.status === "open" && (
         <p className="rounded-2xl border-[1.5px] border-rose-200 bg-rose-50/80 px-4 py-3 text-center text-sm text-rose-700">
@@ -104,7 +120,7 @@ function Live({ me }: { me: Me }) {
         </p>
       )}
       {stage.status === "closed" && stage.leaderboard && (
-        <MyPlace board={stage.leaderboard} className="glass animate-pop-in px-5 py-4" />
+        <MyPlace board={stage.leaderboard} className="glass animate-pop-in px-5 py-3" />
       )}
     </div>
   )
@@ -134,13 +150,14 @@ function SignIn() {
   )
 }
 
-function NotAMember() {
+/** What people who are not Soci see while a members-only activity is on stage. */
+function SociOnly() {
   return (
     <Centered
       icon="lock"
-      kicker="Members only"
-      title="Reserved to Soci"
-      text="Live questions are reserved for PoliNetwork members (Soci). If you think this is a mistake, sign in again with your @polinetwork.org account."
+      kicker="Soci only"
+      title="This one is for Soci"
+      text="Only PoliNetwork members (Soci) can answer this one. Keep this page open: the next game may be open to everyone. If you are a Socio, sign out and in again."
       footer={
         <button
           type="button"

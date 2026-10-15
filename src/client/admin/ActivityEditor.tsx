@@ -3,7 +3,7 @@ import { useLocation } from "wouter"
 import { activityUIs } from "../../activities/ui-registry.ts"
 import { ApiError, api, useApi, useEventStream } from "../api.ts"
 import { Icon } from "../icons.tsx"
-import { Button, Card, Field, Input, Select, Tag } from "../ui.tsx"
+import { Button, Card, Field, Input, Select, Tag, Toggle } from "../ui.tsx"
 import { PresentationSelect, type PresentationSummary } from "./ActivityList.tsx"
 import { controlStage, PageHeader, resetActivity, useStage } from "./AdminLayout.tsx"
 
@@ -14,6 +14,8 @@ interface Activity {
   title: string
   config: unknown
   presentationId: string | null
+  membersOnly: boolean
+  countsToLeaderboard: boolean
   updatedAt: number
 }
 
@@ -47,6 +49,8 @@ export function ActivityEditor({ id }: { id: string }) {
           slug: draft.slug,
           config: draft.config,
           presentationId: draft.presentationId,
+          membersOnly: draft.membersOnly,
+          countsToLeaderboard: draft.countsToLeaderboard,
         },
       })
       loaded.setData(updated)
@@ -116,6 +120,20 @@ export function ActivityEditor({ id }: { id: string }) {
               onChange={(presentationId) => setDraft({ ...draft, presentationId: presentationId || null })}
             />
           </Field>
+          <div className="grid gap-x-4 gap-y-4 sm:grid-cols-2">
+            <Toggle
+              label="Soci only"
+              hint="Off: anyone signed in with a PoliNetwork account can answer. On: only Soci."
+              checked={draft.membersOnly}
+              onChange={(membersOnly) => setDraft({ ...draft, membersOnly })}
+            />
+            <Toggle
+              label="Counts towards the leaderboard"
+              hint="Off: the game still scores and shows points on phones, but they stay off the leaderboard."
+              checked={draft.countsToLeaderboard}
+              onChange={(countsToLeaderboard) => setDraft({ ...draft, countsToLeaderboard })}
+            />
+          </div>
           {draft.type !== saved.type && (
             <p className="rounded-xl bg-amber-400/15 px-3 py-2 text-sm text-amber-800">
               Changing the type starts from fresh settings. It needs the activity off stage and without

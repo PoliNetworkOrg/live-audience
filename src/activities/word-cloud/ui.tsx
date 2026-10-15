@@ -76,7 +76,7 @@ function Audience({
   }
 
   return (
-    <div className="space-y-7">
+    <div className="space-y-3 tall:space-y-4">
       <Question>{config.prompt}</Question>
       <label className="block space-y-2.5">
         <Hint>Up to {config.maxWords} words or short phrases, one per line (60 characters each).</Hint>

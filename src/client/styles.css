@@ -6,6 +6,9 @@
 
 @source "../activities";
 
+/* Phones with room to spare: activities are laid out to fit shorter ones without scrolling. */
+@custom-variant tall (@media (min-height: 740px));
+
 /*
   The PoliNetwork slides theme (slides-polinetwork), itself taken from the website: Tailwind's slate
   neutrals and blue/sky accents, frosted glass on soft blue shapes, pill buttons.

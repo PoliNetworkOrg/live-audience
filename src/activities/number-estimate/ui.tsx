@@ -9,7 +9,7 @@ import {
   useOneOf,
   Verdict,
 } from "../../client/audience-ui.tsx"
-import { Field, Input, Textarea } from "../../client/ui.tsx"
+import { cx, Field, Input, Textarea } from "../../client/ui.tsx"
 import { defineActivityUI } from "../ui-types.ts"
 import {
   type NumberEstimateConfig,
@@ -88,10 +88,10 @@ function Audience({
     }
   }
   return (
-    <div className="space-y-7">
+    <div className="space-y-3 tall:space-y-4">
       <Question>{config.prompt}</Question>
-      <ShownAs name={me.name} />
-      <label className="block space-y-2.5">
+      {open && <ShownAs name={me.name} />}
+      <label className={cx("block space-y-2.5", !open && "hidden")}>
         <span className="block text-sm text-slate-500">Your guess, from 0 to 1000000</span>
         <input
           type="number"
@@ -110,9 +110,11 @@ function Audience({
           {saving ? "Sending…" : response ? "Update guess" : "Submit guess"}
         </SubmitButton>
       )}
-      <Hint>
-        Closest guess wins. If several people are equally close, one winner is drawn at random among them.
-      </Hint>
+      {open && (
+        <Hint>
+          Closest guess wins. If several people are equally close, one winner is drawn at random among them.
+        </Hint>
+      )}
       {outcome ? (
         <EstimateVerdict {...outcome} mine={response?.number} />
       ) : !open ? (
@@ -152,11 +154,11 @@ function EstimateVerdict({
   const winner = draw.winner
   if (youWon) {
     return draw.distance === 0 ? (
-      <Verdict points={points} tone="win" icon="target" title="Spot on!">
+      <Verdict solution points={points} tone="win" icon="target" title="Spot on!">
         The real number was exactly {real}. You win!
       </Verdict>
     ) : (
-      <Verdict points={points} tone="win" icon="trophy" title={cheer}>
+      <Verdict solution points={points} tone="win" icon="trophy" title={cheer}>
         The real number was {real}: your {format(mine ?? 0)} was the closest guess.
       </Verdict>
     )
@@ -166,7 +168,13 @@ function EstimateVerdict({
     : "Nobody guessed this time."
   if (mine === undefined) {
     return (
-      <Verdict points={points} tone="info" icon="target" title={`The real number was ${format(draw.number)}`}>
+      <Verdict
+        solution
+        points={points}
+        tone="info"
+        icon="target"
+        title={`The real number was ${format(draw.number)}`}
+      >
         {winnerLine}
       </Verdict>
     )
@@ -174,7 +182,7 @@ function EstimateVerdict({
   const off = Math.abs(mine - draw.number)
   if (off === draw.distance) {
     return (
-      <Verdict points={points} tone="lose" icon="shuffle" title="So close!">
+      <Verdict solution points={points} tone="lose" icon="shuffle" title="So close!">
         You tied for the closest guess with {draw.tied - 1 === 1 ? "someone else" : `${draw.tied - 1} others`}
         , but the random draw picked {winner?.name}.
       </Verdict>
@@ -188,7 +196,7 @@ function EstimateVerdict({
         ? (["target", "Not bad!"] as const)
         : (["circle-x", "Way off!"] as const)
   return (
-    <Verdict points={points} tone="lose" icon={icon} title={title}>
+    <Verdict solution points={points} tone="lose" icon={icon} title={title}>
       The real number was {real}, you guessed {format(mine)}. {winnerLine}
     </Verdict>
   )

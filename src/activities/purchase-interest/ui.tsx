@@ -71,7 +71,7 @@ function Audience({
     }
   }
   return (
-    <div className="space-y-7">
+    <div className="space-y-3 tall:space-y-4">
       <Question>{config.question}</Question>
       <div className="grid grid-cols-2 gap-3.5">
         {[true, false].map((value) => (

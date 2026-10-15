@@ -139,7 +139,7 @@ function Audience({
   }
 
   return (
-    <div className="space-y-7">
+    <div className="space-y-3 tall:space-y-4">
       <Question>{config.question}</Question>
       {!single && open && (
         <Hint>
