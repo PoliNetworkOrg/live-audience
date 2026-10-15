@@ -9,7 +9,7 @@ import {
   useOneOf,
   Verdict,
 } from "../../client/audience-ui.tsx"
-import { Field, Textarea } from "../../client/ui.tsx"
+import { cx, Field, Textarea } from "../../client/ui.tsx"
 import { defineActivityUI } from "../ui-types.ts"
 import {
   type NumberLotteryConfig,
@@ -74,10 +74,10 @@ function Audience({
     }
   }
   return (
-    <div className="space-y-7">
+    <div className="space-y-3 tall:space-y-4">
       <Question>{config.prompt}</Question>
-      <ShownAs name={me.name} />
-      <label className="block space-y-2.5">
+      {open && <ShownAs name={me.name} />}
+      <label className={cx("block space-y-2.5", !open && "hidden")}>
         <span className="block text-sm text-slate-500">Your number, from 0 to 100</span>
         <input
           type="number"
@@ -96,9 +96,11 @@ function Audience({
           {saving ? "Sending…" : response ? "Update guess" : "Submit guess"}
         </SubmitButton>
       )}
-      <Hint>
-        Closest guess wins. If several people are equally close, one winner is drawn at random among them.
-      </Hint>
+      {open && (
+        <Hint>
+          Closest guess wins. If several people are equally close, one winner is drawn at random among them.
+        </Hint>
+      )}
       {outcome ? (
         <LotteryVerdict {...outcome} mine={response?.number} />
       ) : !open ? (
@@ -135,7 +137,7 @@ function LotteryVerdict({
   const winner = draw.winners[0]
   if (youWon) {
     return (
-      <Verdict points={points} tone="win" icon="trophy" title={cheer}>
+      <Verdict solution points={points} tone="win" icon="trophy" title={cheer}>
         The number was <b>{draw.number}</b>
         {draw.distance === 0 ? ": you nailed it exactly!" : `, and your ${mine} was the closest.`}
       </Verdict>
@@ -143,7 +145,7 @@ function LotteryVerdict({
   }
   if (mine === undefined) {
     return (
-      <Verdict points={points} tone="info" icon="target" title={`The number was ${draw.number}`}>
+      <Verdict solution points={points} tone="info" icon="target" title={`The number was ${draw.number}`}>
         {winner?.name} wins with {winner?.number}. Join in next time!
       </Verdict>
     )
@@ -151,13 +153,14 @@ function LotteryVerdict({
   const distance = Math.abs(mine - draw.number)
   if (distance === draw.distance) {
     return (
-      <Verdict points={points} tone="lose" icon="shuffle" title="So close!">
+      <Verdict solution points={points} tone="lose" icon="shuffle" title="So close!">
         You tied for the closest guess, but the random draw picked {winner?.name}.
       </Verdict>
     )
   }
   return (
     <Verdict
+      solution
       tone="lose"
       icon={distance <= 5 ? "target" : "circle-x"}
       title={distance <= 5 ? "Argh, so close!" : "Not this time"}

@@ -88,7 +88,13 @@ describe("memory quiz", () => {
       expect(JSON.stringify(results)).not.toContain("userId")
       expect(new Store(db).drawActivity(activity.id)).toEqual(results)
       expect(() => store.setStageStatus("open")).toThrow("Reset this quiz")
-      expect(() => store.updateActivity(activity.id, { config })).toThrow("Reset this quiz before editing")
+      expect(() =>
+        store.updateActivity(activity.id, { config: { ...config, question: "Changed?" } }),
+      ).toThrow("Reset this quiz before editing")
+      // Saving the toggles sends the same config along: that is not an edit.
+      expect(
+        store.updateActivity(activity.id, { config, countsToLeaderboard: false }).countsToLeaderboard,
+      ).toBe(false)
       store.resetResponses(activity.id)
       store.setStage(activity.id, "open")
       expect((await answer("Ada", "Cassa")).status).toBe(200)

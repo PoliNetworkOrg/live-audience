@@ -257,6 +257,50 @@ export function Field({ label, hint, children }: { label: string; hint?: ReactNo
   )
 }
 
+/** An on/off switch with its label and an explanation underneath. */
+export function Toggle({
+  label,
+  hint,
+  checked,
+  onChange,
+}: {
+  label: string
+  hint?: ReactNode
+  checked: boolean
+  onChange: (checked: boolean) => void
+}) {
+  return (
+    <label className="flex cursor-pointer items-start gap-3">
+      <input
+        type="checkbox"
+        role="switch"
+        aria-checked={checked}
+        checked={checked}
+        onChange={(event) => onChange(event.target.checked)}
+        className="peer sr-only"
+      />
+      <span
+        aria-hidden
+        className={cx(
+          "relative mt-0.5 h-6 w-10 shrink-0 rounded-full transition peer-focus-visible:ring-4 peer-focus-visible:ring-blue-400/30",
+          checked ? "bg-pn" : "bg-slate-300",
+        )}
+      >
+        <span
+          className={cx(
+            "absolute top-0.5 left-0.5 size-5 rounded-full bg-white shadow transition-transform",
+            checked && "translate-x-4",
+          )}
+        />
+      </span>
+      <span className="space-y-0.5">
+        <span className="block text-sm font-medium text-slate-800">{label}</span>
+        {hint && <span className="block text-xs text-slate-500">{hint}</span>}
+      </span>
+    </label>
+  )
+}
+
 export function Card({ className, children }: { className?: string; children: ReactNode }) {
   return <div className={cx("glass-solid p-6", className)}>{children}</div>
 }

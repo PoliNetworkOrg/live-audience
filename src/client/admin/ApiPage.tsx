@@ -30,6 +30,9 @@ export function ApiPage() {
 
   // Live results for your own charts
   live.onResults("dinner-poll", ({ results }) => console.log(results))
+
+  // People connected to the audience page, and how many answered what is on stage
+  live.onAudience(({ connected, answered }) => console.log(connected, answered))
 </script>`
 
   return (
@@ -118,6 +121,13 @@ export function ApiPage() {
               </td>
             </tr>
             <tr>
+              <td>GET /api/v1/audience</td>
+              <td>
+                <code>{"{ connected, answered, activity }"}</code>: people with the audience page open, and
+                how many answered the activity on stage (its slug)
+              </td>
+            </tr>
+            <tr>
               <td>GET /api/v1/presentations</td>
               <td>All presentations</td>
             </tr>
@@ -132,7 +142,7 @@ export function ApiPage() {
               <td>
                 Server-Sent Events: <code>stage</code> on every change, <code>results</code> for what is on
                 stage (or for <code>?activity=&lt;slug&gt;</code> only), <code>leaderboard</code> for the
-                running presentation
+                running presentation, <code>audience</code> whenever people connect, leave or answer
               </td>
             </tr>
           </tbody>
