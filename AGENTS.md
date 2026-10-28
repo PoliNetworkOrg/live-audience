@@ -15,7 +15,8 @@ See README.md for what the app is, how to run it and how activity types are stru
 
 `cp .env.example .env && pnpm dev`, then open
 `http://localhost:5173/auth/dev-login?as=admin&returnTo=/admin` (or `as=socio` / `as=guest`, plus
-`&n=2` for another person). No IdP needed.
+`&n=2` for another person). No IdP needed. `as=guest` is an account that is not a Socio; to try
+guests, set "Who plays" to guests on a running presentation and open `/` in a private window.
 
 ## Commits
 

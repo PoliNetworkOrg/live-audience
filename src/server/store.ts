@@ -46,8 +46,17 @@ export interface Presentation {
   id: string
   slug: string
   title: string
+  /** Who plays while it runs. */
+  players: Players
   createdAt: number
 }
+
+/**
+ * Who plays a presentation: people signed in with a PoliNetwork account, guests who only typed a
+ * name, or both together.
+ */
+export const PLAYERS = ["accounts", "guests", "everyone"] as const
+export type Players = (typeof PLAYERS)[number]
 
 export interface LeaderboardEntry {
   rank: number
@@ -370,16 +379,31 @@ export class Store {
     return presentation
   }
 
-  createPresentation(input: { title: string; slug: string }): Presentation {
+  createPresentation(input: { title: string; slug: string; players?: Players }): Presentation {
     this.assertPresentationSlugFree(input.slug)
-    const presentation: Presentation = { id: randomUUID(), ...input, createdAt: Date.now() }
+    const presentation: Presentation = {
+      id: randomUUID(),
+      title: input.title,
+      slug: input.slug,
+      players: input.players ?? "accounts",
+      createdAt: Date.now(),
+    }
     this.db
-      .prepare("INSERT INTO presentations (id, slug, title, created_at) VALUES (?, ?, ?, ?)")
-      .run(presentation.id, presentation.slug, presentation.title, presentation.createdAt)
+      .prepare("INSERT INTO presentations (id, slug, title, players, created_at) VALUES (?, ?, ?, ?, ?)")
+      .run(
+        presentation.id,
+        presentation.slug,
+        presentation.title,
+        presentation.players,
+        presentation.createdAt,
+      )
     return presentation
   }
 
-  updatePresentation(idOrSlug: string, patch: { title?: string; slug?: string }): Presentation {
+  updatePresentation(
+    idOrSlug: string,
+    patch: { title?: string; slug?: string; players?: Players },
+  ): Presentation {
     const presentation = this.requirePresentation(idOrSlug)
     if (patch.slug !== undefined && patch.slug !== presentation.slug)
       this.assertPresentationSlugFree(patch.slug)
@@ -387,10 +411,11 @@ export class Store {
       ...presentation,
       title: patch.title ?? presentation.title,
       slug: patch.slug ?? presentation.slug,
+      players: patch.players ?? presentation.players,
     }
     this.db
-      .prepare("UPDATE presentations SET title = ?, slug = ? WHERE id = ?")
-      .run(updated.title, updated.slug, updated.id)
+      .prepare("UPDATE presentations SET title = ?, slug = ?, players = ? WHERE id = ?")
+      .run(updated.title, updated.slug, updated.players, updated.id)
     if (this.getStage().presentationId === updated.id) this.events.emit("stage", this.getStage())
     this.events.emit("leaderboard", updated.id)
     return updated
@@ -872,6 +897,30 @@ export class Store {
     }
   }
 
+  /** Who plays the running presentation: accounts alone when none is running. */
+  runningPlayers(): Players {
+    const presentationId = this.getStage().presentationId
+    return (presentationId && this.getPresentation(presentationId)?.players) || "accounts"
+  }
+
+  /** Whether the running presentation lets people join with just a name. */
+  guestAccessOpen(): boolean {
+    return this.runningPlayers() !== "accounts"
+  }
+
+  /** Everyone who answered or scored in the running presentation, as the leaderboard names them. */
+  namesInPlay(): string[] {
+    const presentationId = this.getStage().presentationId
+    if (!presentationId) return []
+    const rows = this.db
+      .prepare(
+        `SELECT user_name AS name FROM responses JOIN activities a ON a.id = activity_id WHERE a.presentation_id = ?
+         UNION SELECT user_name FROM scores JOIN activities a ON a.id = activity_id WHERE a.presentation_id = ?`,
+      )
+      .all(presentationId, presentationId) as { name: string }[]
+    return rows.map((row) => row.name)
+  }
+
   private writeStage(stage: Stage): Stage {
     this.setSetting("stage", stage)
     this.events.emit("stage", stage)
@@ -948,11 +997,18 @@ interface PresentationRow {
   id: string
   slug: string
   title: string
+  players: Players
   created_at: number
 }
 
 function toPresentation(row: PresentationRow): Presentation {
-  return { id: row.id, slug: row.slug, title: row.title, createdAt: row.created_at }
+  return {
+    id: row.id,
+    slug: row.slug,
+    title: row.title,
+    players: row.players,
+    createdAt: row.created_at,
+  }
 }
 
 function toActivity(row: ActivityRow): Activity {

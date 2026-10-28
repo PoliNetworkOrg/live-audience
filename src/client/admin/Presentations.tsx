@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react"
 import { Link, useLocation } from "wouter"
-import { api, useApi, useEventStream } from "../api.ts"
+import { api, type Players, useApi, useEventStream } from "../api.ts"
 import { Rank } from "../audience-ui.tsx"
 import { Icon } from "../icons.tsx"
-import { Button, Card, Field, Input, Tag } from "../ui.tsx"
+import { Button, Card, Field, Input, Select, Tag } from "../ui.tsx"
 import {
   ActivityRows,
   type ActivityType,
@@ -100,6 +100,7 @@ export function PresentationList() {
                   {answerCount(answers) && <span>· {answerCount(answers)}</span>}
                 </div>
               </div>
+              {p.players !== "accounts" && <Tag>{PLAYER_TAGS[p.players]}</Tag>}
               {stage?.presentation?.id === p.id && <Tag tone="blue">running</Tag>}
               <span className="relative">
                 <PresentationResetButton presentation={p} onReset={activities.reload} />
@@ -116,6 +117,21 @@ export function PresentationList() {
   )
 }
 
+const PLAYER_OPTIONS: { value: Players; label: string; description: string }[] = [
+  { value: "accounts", label: "PoliNetwork accounts", description: "Everyone signs in. The usual way." },
+  {
+    value: "guests",
+    label: "Guests only",
+    description: "Phones ask for a name. The sign-in stays in a corner, for admins.",
+  },
+  { value: "everyone", label: "Guests and accounts", description: "A name, or the sign-in: either way in." },
+]
+
+const PLAYER_TAGS: Record<Exclude<Players, "accounts">, string> = {
+  guests: "guests only",
+  everyone: "guests + accounts",
+}
+
 export function PresentationPage({ id }: { id: string }) {
   const loaded = useApi<PresentationSummary>(`/api/admin/presentations/${id}`)
   const activities = useActivities()
@@ -127,9 +143,12 @@ export function PresentationPage({ id }: { id: string }) {
   const [error, setError] = useState<string | null>(null)
   const [resets, setResets] = useState(0)
 
+  // Only when the saved title or slug change, so switching who plays keeps unsaved edits.
+  const savedTitle = loaded.data?.title
+  const savedSlug = loaded.data?.slug
   useEffect(() => {
-    if (loaded.data) setDraft({ title: loaded.data.title, slug: loaded.data.slug })
-  }, [loaded.data])
+    if (savedTitle !== undefined && savedSlug !== undefined) setDraft({ title: savedTitle, slug: savedSlug })
+  }, [savedTitle, savedSlug])
 
   if (loaded.error) return <p className="text-rose-600">{loaded.error.message}</p>
   const presentation = loaded.data
@@ -139,8 +158,26 @@ export function PresentationPage({ id }: { id: string }) {
 
   const save = async () => {
     try {
+      const saved = await api<PresentationSummary>(`/api/admin/presentations/${id}`, {
+        method: "PATCH",
+        body: draft,
+      })
+      loaded.setData(saved)
+      // The server trims: "Talk " saves as "Talk", which the effect above would not notice.
+      setDraft({ title: saved.title, slug: saved.slug })
+      setError(null)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    }
+  }
+  // Takes effect right away, so it can be switched on in the middle of a talk.
+  const setPlayers = async (players: Players) => {
+    try {
       loaded.setData(
-        await api<PresentationSummary>(`/api/admin/presentations/${id}`, { method: "PATCH", body: draft }),
+        await api<PresentationSummary>(`/api/admin/presentations/${id}`, {
+          method: "PATCH",
+          body: { players },
+        }),
       )
       setError(null)
     } catch (e) {
@@ -215,6 +252,16 @@ export function PresentationPage({ id }: { id: string }) {
                 <Input value={draft.slug} onChange={(e) => setDraft({ ...draft, slug: e.target.value })} />
               </Field>
             </div>
+            <Field
+              label="Who plays"
+              hint="Guests join by typing a name nobody else is using, and cannot answer Soci-only activities. Answers given before a change still count: reset them for a fresh start. Applies right away."
+            >
+              <Select
+                value={presentation.players}
+                onChange={(players) => void setPlayers(players as Players)}
+                options={PLAYER_OPTIONS}
+              />
+            </Field>
             {error && <p className="text-sm text-rose-600">{error}</p>}
             <div className="flex flex-wrap gap-2.5 border-t-[1.5px] border-white pt-5">
               <Button variant="primary" disabled={!dirty} onClick={() => void save()}>

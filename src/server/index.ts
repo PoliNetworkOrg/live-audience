@@ -10,7 +10,10 @@ import { Store } from "./store.ts"
 const env = loadEnv()
 const db = openDatabase(env.DATABASE_PATH)
 const store = new Store(db)
-const auth = createAuth(env, db)
+const auth = createAuth(env, db, {
+  guestAccessOpen: () => store.guestAccessOpen(),
+  namesInPlay: () => store.namesInPlay(),
+})
 
 const server = new Hono()
 server.route("/auth", auth.routes)

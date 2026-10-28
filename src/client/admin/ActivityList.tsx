@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react"
 import { Link, useLocation } from "wouter"
-import { api, useApi } from "../api.ts"
+import { api, type Players, useApi } from "../api.ts"
 import { Icon } from "../icons.tsx"
 import { Button, Card, Field, Input, Select, Tag } from "../ui.tsx"
 import {
@@ -35,6 +35,8 @@ export interface PresentationSummary {
   id: string
   slug: string
   title: string
+  /** Who plays while it runs. */
+  players: Players
 }
 
 /** Every activity, reloaded when the stage changes or answers are reset. */

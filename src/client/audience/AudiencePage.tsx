@@ -1,6 +1,6 @@
-import { type ReactNode, useState } from "react"
+import { type ReactNode, useEffect, useState } from "react"
 import { activityUIs } from "../../activities/ui-registry.ts"
-import { api, loginUrl, logout, type Me, useEventStream, useMe } from "../api.ts"
+import { api, joinAsGuest, loginUrl, logout, type Me, type Players, useEventStream, useMe } from "../api.ts"
 import { CountsToLeaderboard, Leaderboard, type LeaderboardView, MyPlace } from "../audience-ui.tsx"
 import { Backdrop, Orbit, Wordmark } from "../brand.tsx"
 import { Icon } from "../icons.tsx"
@@ -26,11 +26,22 @@ interface AudienceStage {
 export function AudiencePage() {
   const me = useMe()
   const user = me.data?.user
+  const players = me.data?.players ?? "accounts"
+  const playing = me.data?.playing ?? false
+  const { reload } = me
+
+  // Not playing, phones wait for the presenter to let people in with just a name (or stop doing so).
+  useEffect(() => {
+    if (playing) return
+    const timer = setInterval(reload, 5000)
+    return () => clearInterval(timer)
+  }, [playing, reload])
 
   let content: ReactNode
   if (me.loading && !me.data) content = <Spinner />
-  else if (!user) content = <SignIn />
-  else content = <Live me={user} />
+  else if (user && playing) content = <Live me={user} onRejoin={reload} />
+  else if (players === "accounts") content = <SignIn />
+  else content = <JoinAsGuest players={players} signedIn={Boolean(user)} reload={reload} />
 
   return (
     <div className="relative flex min-h-dvh flex-col text-slate-950">
@@ -38,7 +49,8 @@ export function AudiencePage() {
       <header className="relative z-10 flex items-center justify-between gap-3 px-4 pt-[max(0.75rem,env(safe-area-inset-top))] pb-2 tall:pt-[max(1.25rem,env(safe-area-inset-top))] tall:pb-3 sm:px-5">
         {/* On the narrowest phones "Live" makes room for the menu. */}
         <Wordmark suffix="Live" className="shrink-0 max-[22.5rem]:[&>.kicker]:hidden" />
-        {user && <UserMenu user={user} />}
+        {/* With everyone playing, the sign-in sits under the name instead. */}
+        {user ? <UserMenu user={user} /> : players === "guests" && <SignInLink />}
       </header>
       <main className="relative z-10 mx-auto flex w-full max-w-lg flex-1 flex-col justify-center px-5 pt-2 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
         {content}
@@ -47,7 +59,7 @@ export function AudiencePage() {
   )
 }
 
-function Live({ me }: { me: Me }) {
+function Live({ me, onRejoin }: { me: Me; onRejoin: () => void }) {
   const [stage, setStage] = useState<AudienceStage | null>(null)
   const [error, setError] = useState<string | null>(null)
   const connected = useEventStream("/api/audience/events", {
@@ -55,7 +67,16 @@ function Live({ me }: { me: Me }) {
       setStage(data)
       setError(null)
     },
+    // Guest access started or ended: this phone has to join again.
+    rejoin: onRejoin,
   })
+  // A phone that missed `rejoin` (asleep, offline) is refused when it reconnects: ask again whether
+  // it still plays, or it would wait on the old stage forever.
+  useEffect(() => {
+    if (connected) return
+    const timer = setInterval(onRejoin, 5000)
+    return () => clearInterval(timer)
+  }, [connected, onRejoin])
 
   if (!stage) return <Spinner />
 
@@ -79,7 +100,7 @@ function Live({ me }: { me: Me }) {
   if (activity.membersOnly && !me.canParticipate && !me.isAdmin) {
     return (
       <div key={activity.id} className="space-y-10">
-        <SociOnly />
+        <SociOnly guest={me.guest} />
         {stage.leaderboard && <Leaderboard board={stage.leaderboard} />}
       </div>
     )
@@ -126,6 +147,10 @@ function Live({ me }: { me: Me }) {
   )
 }
 
+/** The one thing to do on the screens before joining. */
+const BIG_BUTTON =
+  "inline-flex w-full items-center justify-center gap-2 rounded-full bg-pn px-6 py-4 font-headline text-lg font-medium text-white shadow-[0_16px_32px_-16px_rgb(17_86_174/0.8)] transition hover:bg-pn-deep active:scale-[0.98]"
+
 function SignIn() {
   return (
     <Centered
@@ -138,10 +163,7 @@ function SignIn() {
       }
       text="Sign in with your PoliNetwork account to vote, answer and play along."
       footer={
-        <a
-          href={loginUrl("/")}
-          className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-pn px-6 py-4 font-headline text-lg font-medium text-white shadow-[0_16px_32px_-16px_rgb(17_86_174/0.8)] transition hover:bg-pn-deep active:scale-[0.98]"
-        >
+        <a href={loginUrl("/")} className={BIG_BUTTON}>
           Sign in with PoliNetwork
           <Icon name="arrow-right" className="size-5" />
         </a>
@@ -150,8 +172,117 @@ function SignIn() {
   )
 }
 
+/**
+ * While guests may join: a name is all it takes. With guests only, the PoliNetwork sign-in waits in
+ * the corner for the admin; with everyone, it is the second way in.
+ */
+function JoinAsGuest({
+  players,
+  signedIn,
+  reload,
+}: {
+  players: Exclude<Players, "accounts">
+  signedIn: boolean
+  reload: () => void
+}) {
+  const [name, setName] = useState("")
+  const [error, setError] = useState<string | null>(null)
+  const [joining, setJoining] = useState(false)
+  const join = async () => {
+    setJoining(true)
+    try {
+      await joinAsGuest(name)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Something went wrong")
+    } finally {
+      setJoining(false)
+      // Joined, or guest access may have just ended: either way the page changes.
+      reload()
+    }
+  }
+  return (
+    <Centered
+      emblem
+      kicker="Live questions"
+      title={
+        <>
+          Join the <span className="text-gradient">presentation</span>
+        </>
+      }
+      text="Type your name to vote, answer and play along. It shows on the leaderboard."
+      footer={
+        <form
+          className="space-y-3"
+          onSubmit={(e) => {
+            e.preventDefault()
+            void join()
+          }}
+        >
+          <input
+            value={name}
+            onChange={(e) => {
+              setName(e.target.value)
+              setError(null)
+            }}
+            placeholder="Your name"
+            aria-label="Your name"
+            autoComplete="name"
+            maxLength={40}
+            className="glass w-full rounded-full! px-6 py-4 text-center font-headline text-lg text-slate-800 outline-none placeholder:text-slate-400 focus:ring-4 focus:ring-blue-400/30"
+          />
+          <button
+            type="submit"
+            disabled={!name.trim() || joining}
+            className={cx(BIG_BUTTON, "disabled:opacity-50")}
+          >
+            Join
+            <Icon name="arrow-right" className="size-5" />
+          </button>
+          {players === "everyone" && (
+            <p className="pt-2 text-sm text-slate-500">
+              Socio?{" "}
+              <a href={loginUrl("/")} className="font-medium text-pn underline underline-offset-4">
+                Sign in with PoliNetwork
+              </a>{" "}
+              to answer the games for Soci too.
+            </p>
+          )}
+          {signedIn && players === "guests" && (
+            <p className="text-sm text-slate-500">
+              Only guests play this one. Joining signs you out of your PoliNetwork account on this device.
+            </p>
+          )}
+          {error && <p className="text-sm text-rose-700">{error}</p>}
+        </form>
+      }
+    />
+  )
+}
+
+/** The PoliNetwork sign-in, kept small in the corner for the admin while guests may join with a name. */
+function SignInLink() {
+  return (
+    <a
+      href={loginUrl("/")}
+      className="glass shrink-0 rounded-full! px-3.5 py-1.5 text-sm font-medium text-pn hover:bg-white/80"
+    >
+      Sign in
+    </a>
+  )
+}
+
 /** What people who are not Soci see while a members-only activity is on stage. */
-function SociOnly() {
+function SociOnly({ guest }: { guest?: boolean }) {
+  if (guest) {
+    return (
+      <Centered
+        icon="lock"
+        kicker="Soci only"
+        title="This one is for Soci"
+        text="Guests cannot answer this one. Keep this page open: the next game is coming up."
+      />
+    )
+  }
   return (
     <Centered
       icon="lock"
@@ -171,10 +302,15 @@ function SociOnly() {
   )
 }
 
-/** Fits a phone next to the wordmark: the name gives way first, and admins only see their picture there. */
+/**
+ * Fits a phone next to the wordmark: the name gives way first, and admins and guests (who have a
+ * link beside it) only see their picture there.
+ */
 function UserMenu({ user }: { user: Me }) {
+  const compact = user.isAdmin || user.guest
   return (
     <div className="flex min-w-0 items-center gap-1.5 text-sm sm:gap-2.5">
+      {user.guest && <SignInLink />}
       {user.isAdmin && (
         <a
           href="/admin"
@@ -185,12 +321,17 @@ function UserMenu({ user }: { user: Me }) {
       )}
       <button
         type="button"
-        onClick={() => void logout()}
+        onClick={() => {
+          // A guest who leaves comes back as someone new: their points stay behind.
+          if (user.guest && !confirm("Leave the game? Your points stay with the name you are leaving."))
+            return
+          void logout()
+        }}
         className={cx(
           "glass flex min-w-9 items-center gap-2 rounded-full! py-1 pl-1 text-slate-700 hover:bg-white/80",
-          user.isAdmin ? "pr-1 sm:pr-3" : "pr-3",
+          compact ? "pr-1 sm:pr-3" : "pr-3",
         )}
-        title={`Signed in as ${user.name}. Sign out`}
+        title={user.guest ? `Playing as ${user.name}. Leave` : `Signed in as ${user.name}. Sign out`}
       >
         {user.picture ? (
           <img src={user.picture} alt="" className="size-7 shrink-0 rounded-full" />
@@ -199,7 +340,7 @@ function UserMenu({ user }: { user: Me }) {
             {user.name.slice(0, 1)}
           </span>
         )}
-        <span className={cx("max-w-32 min-w-0 truncate font-medium", user.isAdmin && "max-sm:hidden")}>
+        <span className={cx("max-w-32 min-w-0 truncate font-medium", compact && "max-sm:hidden")}>
           {user.name.split(" ")[0]}
         </span>
       </button>

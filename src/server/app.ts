@@ -6,7 +6,7 @@ import { z } from "zod"
 import { activityDefinitions } from "../activities/registry.ts"
 import type { AuthVariables, SessionUser } from "./auth.ts"
 import { sse, throttleByKey } from "./sse.ts"
-import { type Stage, type Store, StoreError } from "./store.ts"
+import { PLAYERS, type Stage, type Store, StoreError } from "./store.ts"
 
 type AppEnv = { Variables: AuthVariables }
 
@@ -35,6 +35,7 @@ const updateActivityBody = z.object({
 const presentationBody = z.object({
   title: z.string().trim().min(1).max(200),
   slug: z.string().trim().min(1).max(80),
+  players: z.enum(PLAYERS).optional(),
 })
 const respondBody = z.object({ activityId: z.string(), response: z.unknown() })
 
@@ -120,7 +121,7 @@ export function createApp({ store, session }: { store: Store; session: Middlewar
       )
     })
     .get("/presentations", (c) =>
-      c.json(store.listPresentations().map(({ id, slug, title }) => ({ id, slug, title }))),
+      c.json(store.listPresentations().map(({ id, slug, title, players }) => ({ id, slug, title, players }))),
     )
     /** How many people have the audience page open, and how many answered what is on stage. */
     .get("/audience", (c) => c.json(store.getAudienceCounts()))
@@ -197,12 +198,30 @@ export function createApp({ store, session }: { store: Store; session: Middlewar
   // ---- signed-in routes -------------------------------------------------------------------
 
   app.use("/api/*", session)
+  // Guests only count as signed in while the running presentation lets them in.
+  app.use("/api/*", async (c, next) => {
+    if (c.get("user")?.guest && !store.guestAccessOpen()) c.set("user", null)
+    await next()
+  })
 
-  app.get("/api/me", (c) => c.json({ user: c.get("user") }))
+  /**
+   * `players`: who plays the running presentation (accounts, guests or everyone).
+   * `playing`: whether this user may use the audience routes now.
+   */
+  app.get("/api/me", (c) => {
+    const user = c.get("user")
+    return c.json({ user, players: store.runningPlayers(), playing: !!user && canPlay(store, user) })
+  })
 
-  // Anyone with a PoliNetwork account may play; activities marked members only take Soci alone.
+  // Activities marked members only take Soci alone. Who else plays depends on the running
+  // presentation: accounts, guests (accounts are then only there for the admin), or both.
   const audience = new Hono<AppEnv>()
     .use(requireUser(() => true))
+    .use(async (c, next) => {
+      if (!canPlay(store, c.get("user") as SessionUser))
+        throw new HTTPException(403, { message: "This presentation is for guests: join with a name" })
+      await next()
+    })
     .get("/stage", (c) => c.json(audienceView(store, c.get("user") as SessionUser)))
     .post("/respond", async (c) => {
       const user = c.get("user") as SessionUser
@@ -216,7 +235,11 @@ export function createApp({ store, session }: { store: Store; session: Middlewar
     .get("/events", (c) => {
       const user = c.get("user") as SessionUser
       return sse(c, (send) => {
-        const onStage = () => send("stage", audienceView(store, user))
+        const onStage = () => {
+          // Guest access started or ended: the phone has to join again (with a name or the sign-in).
+          if (!canPlay(store, user)) send("rejoin", {})
+          else send("stage", audienceView(store, user))
+        }
         // Points only matter to phones for the presentation running now.
         const onLeaderboard = (id: string) => {
           if (id === store.getStage().presentationId) onStage()
@@ -281,7 +304,13 @@ export function createApp({ store, session }: { store: Store; session: Middlewar
   return app
 }
 
-/** Soci, and admins, who can always take part. */
+/** Whether the running presentation takes this user: accounts, guests, or everyone. */
+function canPlay(store: Store, user: SessionUser) {
+  const players = store.runningPlayers()
+  return players === "everyone" || (players === "guests") === Boolean(user.guest)
+}
+
+/** Soci and admins: the only ones who may answer members-only activities. */
 function isMember(user: SessionUser) {
   return user.canParticipate || user.isAdmin
 }

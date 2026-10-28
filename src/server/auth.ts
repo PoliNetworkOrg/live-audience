@@ -1,8 +1,9 @@
-import { randomBytes } from "node:crypto"
+import { randomBytes, randomUUID } from "node:crypto"
 import type { Context, MiddlewareHandler } from "hono"
 import { Hono } from "hono"
 import { deleteCookie, getCookie, setCookie } from "hono/cookie"
 import * as oidc from "openid-client"
+import { z } from "zod"
 import type { Database } from "./db.ts"
 import type { Env } from "./env.ts"
 
@@ -19,6 +20,8 @@ export interface SessionUser {
   canParticipate: boolean
   /** May use the admin page (has the admin permission). */
   isAdmin: boolean
+  /** Joined with just a name, without a PoliNetwork account, while the presentation allowed it. */
+  guest?: boolean
 }
 
 export type AuthVariables = { user: SessionUser | null }
@@ -32,7 +35,33 @@ interface Session {
   idToken: string | null
 }
 
-export function createAuth(env: Env, db: Database) {
+/** What people type to join as guests: one line, a sensible length. */
+const guestBody = z.object({
+  name: z
+    .string()
+    // Without control and format characters (zero-width spaces, direction overrides), which would
+    // make blank or garbled names on the leaderboard.
+    .transform((name) =>
+      name
+        .replace(/[\p{Cc}\p{Cf}]/gu, "")
+        .replace(/\s+/g, " ")
+        .trim(),
+    )
+    .pipe(z.string().min(1, "Type your name").max(40, "Keep your name under 40 characters")),
+})
+
+export function createAuth(
+  env: Env,
+  db: Database,
+  {
+    guestAccessOpen = () => false,
+    namesInPlay = () => [],
+  }: {
+    guestAccessOpen?: () => boolean
+    /** Names already on the leaderboard, which guests cannot take. */
+    namesInPlay?: () => string[]
+  } = {},
+) {
   const secure = new URL(env.PUBLIC_URL).protocol === "https:"
   const redirectUri = new URL("/auth/callback", env.PUBLIC_URL).href
   const sessionMaxAge = Math.round(env.SESSION_DAYS * 24 * 60 * 60)
@@ -75,6 +104,12 @@ export function createAuth(env: Env, db: Database) {
   // ---- sessions ----------------------------------------------------------------------------
 
   function createSession(c: Context, session: Session) {
+    // Signing in over a guest session (or another account) replaces it. Expired sessions go too:
+    // guests leave many behind, without ever signing out.
+    db.prepare("DELETE FROM sessions WHERE id = ? OR expires_at < ?").run(
+      getCookie(c, SESSION_COOKIE) ?? "",
+      Date.now(),
+    )
     const id = randomBytes(32).toString("base64url")
     db.prepare("INSERT INTO sessions (id, user, id_token, expires_at) VALUES (?, ?, ?, ?)").run(
       id,
@@ -99,6 +134,21 @@ export function createAuth(env: Env, db: Database) {
       | undefined
     if (!row || row.expires_at < Date.now()) return null
     return { user: JSON.parse(row.user), idToken: row.id_token }
+  }
+
+  /**
+   * Whether a guest would share a name with someone else: on the leaderboard, or signed in (on
+   * another phone) and about to be. The session being replaced does not count.
+   */
+  function nameTaken(c: Context, name: string) {
+    const rows = db
+      .prepare("SELECT user FROM sessions WHERE id != ? AND expires_at >= ?")
+      .all(getCookie(c, SESSION_COOKIE) ?? "", Date.now()) as { user: string }[]
+    const key = nameKey(name)
+    return (
+      namesInPlay().some((taken) => nameKey(taken) === key) ||
+      rows.some((row) => nameKey((JSON.parse(row.user) as SessionUser).name) === key)
+    )
   }
 
   function destroySession(c: Context) {
@@ -171,6 +221,31 @@ export function createAuth(env: Env, db: Database) {
     return c.redirect(flow.returnTo)
   })
 
+  /** Joins the running presentation with just a name, when it lets people in without an account. */
+  routes.post("/guest", async (c) => {
+    if (!guestAccessOpen()) return c.json({ error: "Sign in with your PoliNetwork account" }, 403)
+    // JSON only: other sites cannot send it with a plain form, so they cannot swap someone's session.
+    if (!c.req.header("content-type")?.startsWith("application/json"))
+      return c.json({ error: "Send the name as JSON" }, 415)
+    const body = guestBody.safeParse(await c.req.json().catch(() => ({})))
+    if (!body.success) return c.json({ error: body.error.issues[0]?.message ?? "Invalid name" }, 400)
+    // No await from here on: two phones typing the same name at once cannot both get it.
+    if (nameTaken(c, body.data.name))
+      return c.json(
+        { error: `Someone is already playing as ${body.data.name}: add your surname or a nickname` },
+        409,
+      )
+    const user: SessionUser = {
+      id: `guest-${randomUUID()}`,
+      name: body.data.name,
+      canParticipate: false,
+      isAdmin: false,
+      guest: true,
+    }
+    createSession(c, { user, idToken: null })
+    return c.json({ user })
+  })
+
   routes.post("/logout", async (c) => {
     const current = readSession(c)
     destroySession(c)
@@ -218,6 +293,11 @@ export function createAuth(env: Env, db: Database) {
   }
 
   return { session, routes }
+}
+
+/** Names that read the same on the leaderboard compare equal: "anna  ROSSI" and "Anna Rossi". */
+function nameKey(name: string) {
+  return name.normalize("NFKC").replace(/\s+/g, " ").trim().toLocaleLowerCase()
 }
 
 /** Only same-site paths, so the login flow cannot be used as an open redirect. */

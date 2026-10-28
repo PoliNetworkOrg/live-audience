@@ -33,7 +33,8 @@ export function useApi<T>(path: string | null) {
     setState((s) => ({ ...s, loading: true }))
     api<T>(path)
       .then((data) => !cancelled && setState({ data, loading: false }))
-      .catch((error) => !cancelled && setState({ error, loading: false }))
+      // A failed reload keeps what was loaded: a phone offline for a moment stays where it was.
+      .catch((error) => !cancelled && setState((s) => ({ ...s, error, loading: false })))
     return () => {
       cancelled = true
     }
@@ -81,10 +82,23 @@ export interface Me {
   picture?: string
   canParticipate: boolean
   isAdmin: boolean
+  /** Joined with just a name, without a PoliNetwork account. */
+  guest?: boolean
 }
 
+/** Who plays a presentation: PoliNetwork accounts, guests who typed a name, or both. */
+export type Players = "accounts" | "guests" | "everyone"
+
+/**
+ * `players`: who plays the running presentation.
+ * `playing`: whether `user` may answer now.
+ */
 export function useMe() {
-  return useApi<{ user: Me | null }>("/api/me")
+  return useApi<{ user: Me | null; players: Players; playing: boolean }>("/api/me")
+}
+
+export async function joinAsGuest(name: string) {
+  return api<{ user: Me }>("/auth/guest", { body: { name } })
 }
 
 export async function logout() {
