@@ -53,7 +53,14 @@ const guestBody = z.object({
 export function createAuth(
   env: Env,
   db: Database,
-  { guestAccessOpen = () => false }: { guestAccessOpen?: () => boolean } = {},
+  {
+    guestAccessOpen = () => false,
+    namesInPlay = () => [],
+  }: {
+    guestAccessOpen?: () => boolean
+    /** Names already on the leaderboard, which guests cannot take. */
+    namesInPlay?: () => string[]
+  } = {},
 ) {
   const secure = new URL(env.PUBLIC_URL).protocol === "https:"
   const redirectUri = new URL("/auth/callback", env.PUBLIC_URL).href
@@ -127,6 +134,21 @@ export function createAuth(
       | undefined
     if (!row || row.expires_at < Date.now()) return null
     return { user: JSON.parse(row.user), idToken: row.id_token }
+  }
+
+  /**
+   * Whether a guest would share a name with someone else: on the leaderboard, or signed in (on
+   * another phone) and about to be. The session being replaced does not count.
+   */
+  function nameTaken(c: Context, name: string) {
+    const rows = db
+      .prepare("SELECT user FROM sessions WHERE id != ? AND expires_at >= ?")
+      .all(getCookie(c, SESSION_COOKIE) ?? "", Date.now()) as { user: string }[]
+    const key = nameKey(name)
+    return (
+      namesInPlay().some((taken) => nameKey(taken) === key) ||
+      rows.some((row) => nameKey((JSON.parse(row.user) as SessionUser).name) === key)
+    )
   }
 
   function destroySession(c: Context) {
@@ -207,6 +229,12 @@ export function createAuth(
       return c.json({ error: "Send the name as JSON" }, 415)
     const body = guestBody.safeParse(await c.req.json().catch(() => ({})))
     if (!body.success) return c.json({ error: body.error.issues[0]?.message ?? "Invalid name" }, 400)
+    // No await from here on: two phones typing the same name at once cannot both get it.
+    if (nameTaken(c, body.data.name))
+      return c.json(
+        { error: `Someone is already playing as ${body.data.name}: add your surname or a nickname` },
+        409,
+      )
     const user: SessionUser = {
       id: `guest-${randomUUID()}`,
       name: body.data.name,
@@ -265,6 +293,11 @@ export function createAuth(
   }
 
   return { session, routes }
+}
+
+/** Names that read the same on the leaderboard compare equal: "anna  ROSSI" and "Anna Rossi". */
+function nameKey(name: string) {
+  return name.normalize("NFKC").replace(/\s+/g, " ").trim().toLocaleLowerCase()
 }
 
 /** Only same-site paths, so the login flow cannot be used as an open redirect. */

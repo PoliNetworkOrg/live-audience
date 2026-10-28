@@ -25,7 +25,10 @@ let server: Hono
 beforeEach(() => {
   db = openDatabase(":memory:")
   store = new Store(db)
-  const auth = createAuth(env, db, { guestAccessOpen: () => store.guestAccessOpen() })
+  const auth = createAuth(env, db, {
+    guestAccessOpen: () => store.guestAccessOpen(),
+    namesInPlay: () => store.namesInPlay(),
+  })
   server = new Hono()
   server.route("/auth", auth.routes)
   server.route("/", createApp({ store, session: auth.session }))
@@ -62,11 +65,11 @@ describe("joining without signing in", () => {
     const nico = phone()
 
     // Off by default: the sign-in is the only way in.
-    expect(await (await nico("/api/me")).json()).toEqual({ user: null, guestAccess: false, playing: false })
+    expect(await (await nico("/api/me")).json()).toEqual({ user: null, players: "accounts", playing: false })
     expect((await nico("/auth/guest", { name: "Nico" })).status).toBe(403)
 
     // On, but the presentation is not running yet.
-    store.updatePresentation(talk.id, { guestAccess: true })
+    store.updatePresentation(talk.id, { players: "guests" })
     expect((await nico("/auth/guest", { name: "Nico" })).status).toBe(403)
 
     store.setStage(wheel.id, "open")
@@ -88,7 +91,7 @@ describe("joining without signing in", () => {
     }
     expect(me).toMatchObject({
       user: { name: "Nico Newcomer", guest: true, isAdmin: false },
-      guestAccess: true,
+      players: "guests",
       playing: true,
     })
     expect(me.user.id).toMatch(/^guest-/)
@@ -101,19 +104,19 @@ describe("joining without signing in", () => {
     expect((await nico("/api/admin/presentations")).status).toBe(403)
 
     // Switched off: the guest is signed out, and comes back with the same name if it reopens.
-    store.updatePresentation(talk.id, { guestAccess: false })
-    expect(await (await nico("/api/me")).json()).toEqual({ user: null, guestAccess: false, playing: false })
+    store.updatePresentation(talk.id, { players: "accounts" })
+    expect(await (await nico("/api/me")).json()).toEqual({ user: null, players: "accounts", playing: false })
     expect((await nico("/api/audience/stage")).status).toBe(401)
-    store.updatePresentation(talk.id, { guestAccess: true })
+    store.updatePresentation(talk.id, { players: "guests" })
     expect(await (await nico("/api/me")).json()).toMatchObject({ user: { name: "Nico Newcomer" } })
 
     // Ending the presentation ends guest access too.
     store.setStagePresentation(null)
-    expect(await (await nico("/api/me")).json()).toEqual({ user: null, guestAccess: false, playing: false })
+    expect(await (await nico("/api/me")).json()).toEqual({ user: null, players: "accounts", playing: false })
   })
 
   it("lets only guests play while it is on, and only accounts while it is off", async () => {
-    const talk = store.createPresentation({ title: "Welcome", slug: "welcome", guestAccess: true })
+    const talk = store.createPresentation({ title: "Welcome", slug: "welcome", players: "guests" })
     const wheel = store.createActivity({
       type: "wheel",
       title: "Wheel",
@@ -129,20 +132,89 @@ describe("joining without signing in", () => {
     // Signed in with an account: still signed in (for the admin), but not playing.
     expect(await (await sara("/api/me")).json()).toMatchObject({
       user: { name: "Sara Socia" },
-      guestAccess: true,
+      players: "guests",
       playing: false,
     })
     expect((await sara("/api/audience/stage")).status).toBe(403)
     expect((await sara("/api/audience/respond", { activityId: wheel.id, response: {} })).status).toBe(403)
     expect((await nico("/api/audience/respond", { activityId: wheel.id, response: {} })).status).toBe(200)
 
-    store.updatePresentation(talk.id, { guestAccess: false })
+    store.updatePresentation(talk.id, { players: "accounts" })
     expect((await sara("/api/audience/respond", { activityId: wheel.id, response: {} })).status).toBe(200)
     expect((await nico("/api/audience/respond", { activityId: wheel.id, response: {} })).status).toBe(401)
   })
 
+  it("lets guests and accounts play together when everyone is in", async () => {
+    const talk = store.createPresentation({ title: "Welcome", slug: "welcome", players: "everyone" })
+    const wheel = store.createActivity({
+      type: "wheel",
+      title: "Wheel",
+      slug: "wheel",
+      presentationId: talk.id,
+    })
+    const soci = store.createActivity({
+      type: "wheel",
+      title: "Soci",
+      slug: "soci",
+      presentationId: talk.id,
+      membersOnly: true,
+    })
+    store.setStage(wheel.id, "open")
+    const sara = phone()
+    await sara("/auth/dev-login?as=socio")
+    const nico = phone()
+    expect(await (await nico("/api/me")).json()).toEqual({ user: null, players: "everyone", playing: false })
+    expect((await nico("/auth/guest", { name: "Nico" })).status).toBe(200)
+
+    expect(await (await sara("/api/me")).json()).toMatchObject({ players: "everyone", playing: true })
+    expect(await (await nico("/api/me")).json()).toMatchObject({ players: "everyone", playing: true })
+    expect((await sara("/api/audience/respond", { activityId: wheel.id, response: {} })).status).toBe(200)
+    expect((await nico("/api/audience/respond", { activityId: wheel.id, response: {} })).status).toBe(200)
+    store.setStage(soci.id, "open")
+    expect((await sara("/api/audience/respond", { activityId: soci.id, response: {} })).status).toBe(200)
+    expect((await nico("/api/audience/respond", { activityId: soci.id, response: {} })).status).toBe(403)
+
+    // Accounts only again: the guest is out, Sara keeps playing.
+    store.updatePresentation(talk.id, { players: "accounts" })
+    expect((await nico("/api/audience/stage")).status).toBe(401)
+    expect((await sara("/api/audience/stage")).status).toBe(200)
+  })
+
+  it("does not let two people play under the same name", async () => {
+    const talk = store.createPresentation({ title: "Welcome", slug: "welcome", players: "everyone" })
+    const wheel = store.createActivity({
+      type: "wheel",
+      title: "Wheel",
+      slug: "wheel",
+      presentationId: talk.id,
+    })
+    store.setStage(wheel.id, "open")
+    const anna = phone()
+    expect((await anna("/auth/guest", { name: "Anna Rossi" })).status).toBe(200)
+    await anna("/api/audience/respond", { activityId: wheel.id, response: {} })
+
+    // Spelled differently, it reads the same on the leaderboard.
+    const other = phone()
+    const taken = await other("/auth/guest", { name: "anna  ROSSI" })
+    expect(taken.status).toBe(409)
+    expect(await taken.json()).toEqual({
+      error: "Someone is already playing as anna ROSSI: add your surname or a nickname",
+    })
+    expect(taken.headers.get("set-cookie")).toBeNull()
+    // Nor the name of someone signed in with an account.
+    await phone()("/auth/dev-login?as=socio")
+    expect((await other("/auth/guest", { name: "Sara Socia" })).status).toBe(409)
+
+    // Anna leaves, but her answer stays on the leaderboard under her name.
+    await anna("/auth/logout", {})
+    expect((await other("/auth/guest", { name: "Anna Rossi" })).status).toBe(409)
+    expect((await other("/auth/guest", { name: "Anna Bianchi" })).status).toBe(200)
+    // Joining again with your own name is fine.
+    expect((await other("/auth/guest", { name: "Anna Bianchi" })).status).toBe(200)
+  })
+
   it("replaces the session it joins over, and clears expired ones", async () => {
-    const talk = store.createPresentation({ title: "Welcome", slug: "welcome", guestAccess: true })
+    const talk = store.createPresentation({ title: "Welcome", slug: "welcome", players: "guests" })
     store.setStagePresentation(talk.id)
     const sessions = () => (db.prepare("SELECT COUNT(*) AS n FROM sessions").get() as { n: number }).n
     db.prepare("INSERT INTO sessions (id, user, id_token, expires_at) VALUES ('old', '{}', NULL, 1)").run()
@@ -156,12 +228,12 @@ describe("joining without signing in", () => {
 
   it("is saved with the presentation and listed by the API", async () => {
     const talk = store.createPresentation({ title: "Welcome", slug: "welcome" })
-    expect(store.getPresentation(talk.id)?.guestAccess).toBe(false)
-    store.updatePresentation(talk.id, { guestAccess: true })
-    expect(store.getPresentation("welcome")?.guestAccess).toBe(true)
+    expect(store.getPresentation(talk.id)?.players).toBe("accounts")
+    store.updatePresentation(talk.id, { players: "guests" })
+    expect(store.getPresentation("welcome")?.players).toBe("guests")
     const res = await server.request("/api/v1/presentations", {
       headers: { authorization: `Bearer ${store.getApiKey()}` },
     })
-    expect(await res.json()).toEqual([{ id: talk.id, slug: "welcome", title: "Welcome", guestAccess: true }])
+    expect(await res.json()).toEqual([{ id: talk.id, slug: "welcome", title: "Welcome", players: "guests" }])
   })
 })

@@ -1,6 +1,6 @@
 import { type ReactNode, useEffect, useState } from "react"
 import { activityUIs } from "../../activities/ui-registry.ts"
-import { api, joinAsGuest, loginUrl, logout, type Me, useEventStream, useMe } from "../api.ts"
+import { api, joinAsGuest, loginUrl, logout, type Me, type Players, useEventStream, useMe } from "../api.ts"
 import { CountsToLeaderboard, Leaderboard, type LeaderboardView, MyPlace } from "../audience-ui.tsx"
 import { Backdrop, Orbit, Wordmark } from "../brand.tsx"
 import { Icon } from "../icons.tsx"
@@ -26,7 +26,7 @@ interface AudienceStage {
 export function AudiencePage() {
   const me = useMe()
   const user = me.data?.user
-  const guestAccess = me.data?.guestAccess ?? false
+  const players = me.data?.players ?? "accounts"
   const playing = me.data?.playing ?? false
   const { reload } = me
 
@@ -40,7 +40,8 @@ export function AudiencePage() {
   let content: ReactNode
   if (me.loading && !me.data) content = <Spinner />
   else if (user && playing) content = <Live me={user} onRejoin={reload} />
-  else content = guestAccess ? <JoinAsGuest signedIn={Boolean(user)} reload={reload} /> : <SignIn />
+  else if (players === "accounts") content = <SignIn />
+  else content = <JoinAsGuest players={players} signedIn={Boolean(user)} reload={reload} />
 
   return (
     <div className="relative flex min-h-dvh flex-col text-slate-950">
@@ -48,7 +49,8 @@ export function AudiencePage() {
       <header className="relative z-10 flex items-center justify-between gap-3 px-4 pt-[max(0.75rem,env(safe-area-inset-top))] pb-2 tall:pt-[max(1.25rem,env(safe-area-inset-top))] tall:pb-3 sm:px-5">
         {/* On the narrowest phones "Live" makes room for the menu. */}
         <Wordmark suffix="Live" className="shrink-0 max-[22.5rem]:[&>.kicker]:hidden" />
-        {user ? <UserMenu user={user} /> : guestAccess && <SignInLink />}
+        {/* With everyone playing, the sign-in sits under the name instead. */}
+        {user ? <UserMenu user={user} /> : players === "guests" && <SignInLink />}
       </header>
       <main className="relative z-10 mx-auto flex w-full max-w-lg flex-1 flex-col justify-center px-5 pt-2 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
         {content}
@@ -170,8 +172,19 @@ function SignIn() {
   )
 }
 
-/** While guests may join: a name is all it takes. The PoliNetwork sign-in waits in the corner. */
-function JoinAsGuest({ signedIn, reload }: { signedIn: boolean; reload: () => void }) {
+/**
+ * While guests may join: a name is all it takes. With guests only, the PoliNetwork sign-in waits in
+ * the corner for the admin; with everyone, it is the second way in.
+ */
+function JoinAsGuest({
+  players,
+  signedIn,
+  reload,
+}: {
+  players: Exclude<Players, "accounts">
+  signedIn: boolean
+  reload: () => void
+}) {
   const [name, setName] = useState("")
   const [error, setError] = useState<string | null>(null)
   const [joining, setJoining] = useState(false)
@@ -207,7 +220,10 @@ function JoinAsGuest({ signedIn, reload }: { signedIn: boolean; reload: () => vo
         >
           <input
             value={name}
-            onChange={(e) => setName(e.target.value)}
+            onChange={(e) => {
+              setName(e.target.value)
+              setError(null)
+            }}
             placeholder="Your name"
             aria-label="Your name"
             autoComplete="name"
@@ -222,7 +238,16 @@ function JoinAsGuest({ signedIn, reload }: { signedIn: boolean; reload: () => vo
             Join
             <Icon name="arrow-right" className="size-5" />
           </button>
-          {signedIn && (
+          {players === "everyone" && (
+            <p className="pt-2 text-sm text-slate-500">
+              Socio?{" "}
+              <a href={loginUrl("/")} className="font-medium text-pn underline underline-offset-4">
+                Sign in with PoliNetwork
+              </a>{" "}
+              to answer the games for Soci too.
+            </p>
+          )}
+          {signedIn && players === "guests" && (
             <p className="text-sm text-slate-500">
               Only guests play this one. Joining signs you out of your PoliNetwork account on this device.
             </p>

@@ -57,7 +57,7 @@ const migrations = [
   ALTER TABLE activities ADD COLUMN counts_to_leaderboard INTEGER NOT NULL DEFAULT 1;
   `,
   `
-  ALTER TABLE presentations ADD COLUMN guest_access INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE presentations ADD COLUMN players TEXT NOT NULL DEFAULT 'accounts';
   `,
 ]
 

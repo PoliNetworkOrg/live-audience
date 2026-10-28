@@ -86,12 +86,15 @@ export interface Me {
   guest?: boolean
 }
 
+/** Who plays a presentation: PoliNetwork accounts, guests who typed a name, or both. */
+export type Players = "accounts" | "guests" | "everyone"
+
 /**
- * `guestAccess`: whether the running presentation lets people join with just a name.
- * `playing`: whether `user` may answer now (only guests while guests may join, only accounts otherwise).
+ * `players`: who plays the running presentation.
+ * `playing`: whether `user` may answer now.
  */
 export function useMe() {
-  return useApi<{ user: Me | null; guestAccess: boolean; playing: boolean }>("/api/me")
+  return useApi<{ user: Me | null; players: Players; playing: boolean }>("/api/me")
 }
 
 export async function joinAsGuest(name: string) {
