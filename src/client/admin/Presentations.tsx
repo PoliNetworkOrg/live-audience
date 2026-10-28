@@ -143,9 +143,13 @@ export function PresentationPage({ id }: { id: string }) {
 
   const save = async () => {
     try {
-      loaded.setData(
-        await api<PresentationSummary>(`/api/admin/presentations/${id}`, { method: "PATCH", body: draft }),
-      )
+      const saved = await api<PresentationSummary>(`/api/admin/presentations/${id}`, {
+        method: "PATCH",
+        body: draft,
+      })
+      loaded.setData(saved)
+      // The server trims: "Talk " saves as "Talk", which the effect above would not notice.
+      setDraft({ title: saved.title, slug: saved.slug })
       setError(null)
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
@@ -235,7 +239,7 @@ export function PresentationPage({ id }: { id: string }) {
             </div>
             <Toggle
               label="Join without signing in"
-              hint="While this presentation runs, only guests play: phones ask for a name, and the PoliNetwork sign-in stays in a corner for admins. Nobody can answer Soci-only activities. Applies right away."
+              hint="While this presentation runs, only guests play: phones ask for a name, and the PoliNetwork sign-in stays in a corner for admins. Nobody can answer Soci-only activities. Answers given before switching it on still count: reset them for a fresh start. Applies right away."
               checked={presentation.guestAccess}
               onChange={(guestAccess) => void setGuestAccess(guestAccess)}
             />

@@ -39,7 +39,14 @@ interface Session {
 const guestBody = z.object({
   name: z
     .string()
-    .transform((name) => name.replace(/\s+/g, " ").trim())
+    // Without control and format characters (zero-width spaces, direction overrides), which would
+    // make blank or garbled names on the leaderboard.
+    .transform((name) =>
+      name
+        .replace(/[\p{Cc}\p{Cf}]/gu, "")
+        .replace(/\s+/g, " ")
+        .trim(),
+    )
     .pipe(z.string().min(1, "Type your name").max(40, "Keep your name under 40 characters")),
 })
 
@@ -90,9 +97,12 @@ export function createAuth(
   // ---- sessions ----------------------------------------------------------------------------
 
   function createSession(c: Context, session: Session) {
-    // Signing in over a guest session (or another account) replaces it.
-    const previous = getCookie(c, SESSION_COOKIE)
-    if (previous) db.prepare("DELETE FROM sessions WHERE id = ?").run(previous)
+    // Signing in over a guest session (or another account) replaces it. Expired sessions go too:
+    // guests leave many behind, without ever signing out.
+    db.prepare("DELETE FROM sessions WHERE id = ? OR expires_at < ?").run(
+      getCookie(c, SESSION_COOKIE) ?? "",
+      Date.now(),
+    )
     const id = randomBytes(32).toString("base64url")
     db.prepare("INSERT INTO sessions (id, user, id_token, expires_at) VALUES (?, ?, ?, ?)").run(
       id,

@@ -68,6 +68,13 @@ function Live({ me, onRejoin }: { me: Me; onRejoin: () => void }) {
     // Guest access started or ended: this phone has to join again.
     rejoin: onRejoin,
   })
+  // A phone that missed `rejoin` (asleep, offline) is refused when it reconnects: ask again whether
+  // it still plays, or it would wait on the old stage forever.
+  useEffect(() => {
+    if (connected) return
+    const timer = setInterval(onRejoin, 5000)
+    return () => clearInterval(timer)
+  }, [connected, onRejoin])
 
   if (!stage) return <Spinner />
 
@@ -289,7 +296,12 @@ function UserMenu({ user }: { user: Me }) {
       )}
       <button
         type="button"
-        onClick={() => void logout()}
+        onClick={() => {
+          // A guest who leaves comes back as someone new: their points stay behind.
+          if (user.guest && !confirm("Leave the game? Your points stay with the name you are leaving."))
+            return
+          void logout()
+        }}
         className={cx(
           "glass flex min-w-9 items-center gap-2 rounded-full! py-1 pl-1 text-slate-700 hover:bg-white/80",
           compact ? "pr-1 sm:pr-3" : "pr-3",

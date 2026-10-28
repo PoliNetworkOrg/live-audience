@@ -33,7 +33,8 @@ export function useApi<T>(path: string | null) {
     setState((s) => ({ ...s, loading: true }))
     api<T>(path)
       .then((data) => !cancelled && setState({ data, loading: false }))
-      .catch((error) => !cancelled && setState({ error, loading: false }))
+      // A failed reload keeps what was loaded: a phone offline for a moment stays where it was.
+      .catch((error) => !cancelled && setState((s) => ({ ...s, error, loading: false })))
     return () => {
       cancelled = true
     }

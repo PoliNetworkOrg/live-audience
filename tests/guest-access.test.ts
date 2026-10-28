@@ -2,7 +2,7 @@ import { Hono } from "hono"
 import { beforeEach, describe, expect, it } from "vitest"
 import { createApp } from "../src/server/app.ts"
 import { createAuth } from "../src/server/auth.ts"
-import { openDatabase } from "../src/server/db.ts"
+import { type Database, openDatabase } from "../src/server/db.ts"
 import type { Env } from "../src/server/env.ts"
 import { Store } from "../src/server/store.ts"
 
@@ -18,11 +18,12 @@ const env: Env = {
   DEV_LOGIN: true,
 }
 
+let db: Database
 let store: Store
 let server: Hono
 
 beforeEach(() => {
-  const db = openDatabase(":memory:")
+  db = openDatabase(":memory:")
   store = new Store(db)
   const auth = createAuth(env, db, { guestAccessOpen: () => store.guestAccessOpen() })
   server = new Hono()
@@ -70,6 +71,8 @@ describe("joining without signing in", () => {
 
     store.setStage(wheel.id, "open")
     expect((await nico("/auth/guest", { name: "   " })).status).toBe(400)
+    expect((await nico("/auth/guest", { name: "\u200B\u202E" })).status).toBe(400)
+    expect((await nico("/auth/guest", { name: "x".repeat(41) })).status).toBe(400)
     // A form posted from another site cannot create (and swap in) a guest session.
     const form = await server.request("/auth/guest", {
       method: "POST",
@@ -78,7 +81,7 @@ describe("joining without signing in", () => {
     })
     expect(form.status).toBe(415)
     expect(form.headers.get("set-cookie")).toBeNull()
-    const joined = await nico("/auth/guest", { name: "  Nico   Newcomer " })
+    const joined = await nico("/auth/guest", { name: "  Nico \u200B  Newcomer " })
     expect(joined.status).toBe(200)
     const me = (await (await nico("/api/me")).json()) as {
       user: { id: string; name: string; guest: boolean }
@@ -136,6 +139,19 @@ describe("joining without signing in", () => {
     store.updatePresentation(talk.id, { guestAccess: false })
     expect((await sara("/api/audience/respond", { activityId: wheel.id, response: {} })).status).toBe(200)
     expect((await nico("/api/audience/respond", { activityId: wheel.id, response: {} })).status).toBe(401)
+  })
+
+  it("replaces the session it joins over, and clears expired ones", async () => {
+    const talk = store.createPresentation({ title: "Welcome", slug: "welcome", guestAccess: true })
+    store.setStagePresentation(talk.id)
+    const sessions = () => (db.prepare("SELECT COUNT(*) AS n FROM sessions").get() as { n: number }).n
+    db.prepare("INSERT INTO sessions (id, user, id_token, expires_at) VALUES ('old', '{}', NULL, 1)").run()
+    const sara = phone()
+    await sara("/auth/dev-login?as=socio")
+    expect(sessions()).toBe(1)
+    await sara("/auth/guest", { name: "Sara" })
+    expect(sessions()).toBe(1)
+    expect(await (await sara("/api/me")).json()).toMatchObject({ user: { name: "Sara", guest: true } })
   })
 
   it("is saved with the presentation and listed by the API", async () => {
