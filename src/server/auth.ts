@@ -1,8 +1,9 @@
-import { randomBytes } from "node:crypto"
+import { randomBytes, randomUUID } from "node:crypto"
 import type { Context, MiddlewareHandler } from "hono"
 import { Hono } from "hono"
 import { deleteCookie, getCookie, setCookie } from "hono/cookie"
 import * as oidc from "openid-client"
+import { z } from "zod"
 import type { Database } from "./db.ts"
 import type { Env } from "./env.ts"
 
@@ -19,6 +20,8 @@ export interface SessionUser {
   canParticipate: boolean
   /** May use the admin page (has the admin permission). */
   isAdmin: boolean
+  /** Joined with just a name, without a PoliNetwork account, while the presentation allowed it. */
+  guest?: boolean
 }
 
 export type AuthVariables = { user: SessionUser | null }
@@ -32,7 +35,17 @@ interface Session {
   idToken: string | null
 }
 
-export function createAuth(env: Env, db: Database) {
+/** What people type to join as guests: one line, a sensible length. */
+export const guestName = z
+  .string()
+  .transform((name) => name.replace(/\s+/g, " ").trim())
+  .pipe(z.string().min(1, "Type your name").max(40, "Keep your name under 40 characters"))
+
+export function createAuth(
+  env: Env,
+  db: Database,
+  { guestAccessOpen = () => false }: { guestAccessOpen?: () => boolean } = {},
+) {
   const secure = new URL(env.PUBLIC_URL).protocol === "https:"
   const redirectUri = new URL("/auth/callback", env.PUBLIC_URL).href
   const sessionMaxAge = Math.round(env.SESSION_DAYS * 24 * 60 * 60)
@@ -75,6 +88,9 @@ export function createAuth(env: Env, db: Database) {
   // ---- sessions ----------------------------------------------------------------------------
 
   function createSession(c: Context, session: Session) {
+    // Signing in over a guest session (or another account) replaces it.
+    const previous = getCookie(c, SESSION_COOKIE)
+    if (previous) db.prepare("DELETE FROM sessions WHERE id = ?").run(previous)
     const id = randomBytes(32).toString("base64url")
     db.prepare("INSERT INTO sessions (id, user, id_token, expires_at) VALUES (?, ?, ?, ?)").run(
       id,
@@ -169,6 +185,26 @@ export function createAuth(env: Env, db: Database) {
     if (!claims) return c.text("The identity provider sent no ID token.", 400)
     createSession(c, { user: userFromClaims(claims), idToken: tokens.id_token ?? null })
     return c.redirect(flow.returnTo)
+  })
+
+  /** Joins the running presentation with just a name, when it lets people in without an account. */
+  routes.post("/guest", async (c) => {
+    if (!guestAccessOpen()) return c.json({ error: "Sign in with your PoliNetwork account" }, 403)
+    // JSON only: other sites cannot send it with a plain form, so they cannot swap someone's session.
+    if (!c.req.header("content-type")?.startsWith("application/json"))
+      return c.json({ error: "Send the name as JSON" }, 415)
+    const body = (await c.req.json().catch(() => ({}))) as { name?: unknown }
+    const name = guestName.safeParse(body.name)
+    if (!name.success) return c.json({ error: name.error.issues[0]?.message ?? "Invalid name" }, 400)
+    const user: SessionUser = {
+      id: `guest-${randomUUID()}`,
+      name: name.data,
+      canParticipate: false,
+      isAdmin: false,
+      guest: true,
+    }
+    createSession(c, { user, idToken: null })
+    return c.json({ user })
   })
 
   routes.post("/logout", async (c) => {

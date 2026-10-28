@@ -81,10 +81,17 @@ export interface Me {
   picture?: string
   canParticipate: boolean
   isAdmin: boolean
+  /** Joined with just a name, without a PoliNetwork account. */
+  guest?: boolean
 }
 
+/** `guestAccess`: whether the running presentation lets people join with just a name. */
 export function useMe() {
-  return useApi<{ user: Me | null }>("/api/me")
+  return useApi<{ user: Me | null; guestAccess: boolean }>("/api/me")
+}
+
+export async function joinAsGuest(name: string) {
+  return api<{ user: Me }>("/auth/guest", { body: { name } })
 }
 
 export async function logout() {

@@ -73,6 +73,7 @@ The app is a regular OIDC client of `auth.polinetwork.org`.
    For local development against a local IdP (`http://localhost:3000`), register a separate **native** app with redirect URI `http://localhost:5173/auth/callback`: the IdP refuses localhost redirects for web apps.
 2. **Admin permission**: at `<IdP>/access`, create the permission `live-audience:admin` and attach it to the role(s) that should run presentations (or set `ADMIN_PERMISSION` to an existing one).
 3. **Audience**: anyone with a PoliNetwork account may take part. Activities marked **Soci only** (Admin, activity page) take answers only from people with the `socio` role, which also includes custom roles inheriting from Socio. Change the role with `AUDIENCE_ROLE`. Admins can always take part.
+4. **Without signing in**: a presentation can switch on **Join without signing in** (Admin, presentation page). While it is the running one, only guests play: the audience page asks for a name instead of the PoliNetwork sign-in, which stays as a small "Sign in" button in the corner so admins can reach the admin page. People signed in with an account do not play (they are asked for a name too), and nobody can answer Soci-only activities. Guests show on the leaderboard under the name they typed. Switching it off, or ending the presentation, sends guests back to the sign-in; if it comes back on, they return with the same name and points.
 
 Roles and permissions are read from the ID token (`polinetwork_roles`, `polinetwork_permissions`) at sign-in and kept for the session (`SESSION_DAYS`, default 7). Someone who stops being a Socio keeps access until their session ends; signing out and in again refreshes it.
 
@@ -149,7 +150,7 @@ Plain HTTP: `Authorization: Bearer <key>` (or `?key=`, which `EventSource` needs
 | `POST /api/v1/activities/:slug/reset` | Delete all answers |
 | `POST /api/v1/activities/:slug/draw` | Draw a lottery, reveal a real number or a quiz; outcome, winner and points persist |
 | `GET /api/v1/audience` | `{ connected, answered, activity }`: people with the audience page open (several tabs count once), and answers to the activity on stage (`activity` is its slug, null with nothing on stage) |
-| `GET /api/v1/presentations` | Every presentation |
+| `GET /api/v1/presentations` | Every presentation, with `guestAccess` (people may join with just a name while it runs) |
 | `GET /api/v1/presentations/:slug/leaderboard` | `{ id, slug, title, leaderboard: [{ rank, name, points }] }`, best first, ties share a rank |
 | `GET /api/v1/events[?activity=<slug>]` | SSE: `stage` events, `results` for what is on stage (or for that activity), `leaderboard` for the running presentation, `audience` (as `GET /audience`) whenever people connect, leave or answer |
 

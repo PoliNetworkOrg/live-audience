@@ -35,6 +35,7 @@ const updateActivityBody = z.object({
 const presentationBody = z.object({
   title: z.string().trim().min(1).max(200),
   slug: z.string().trim().min(1).max(80),
+  guestAccess: z.boolean().optional(),
 })
 const respondBody = z.object({ activityId: z.string(), response: z.unknown() })
 
@@ -120,7 +121,11 @@ export function createApp({ store, session }: { store: Store; session: Middlewar
       )
     })
     .get("/presentations", (c) =>
-      c.json(store.listPresentations().map(({ id, slug, title }) => ({ id, slug, title }))),
+      c.json(
+        store
+          .listPresentations()
+          .map(({ id, slug, title, guestAccess }) => ({ id, slug, title, guestAccess })),
+      ),
     )
     /** How many people have the audience page open, and how many answered what is on stage. */
     .get("/audience", (c) => c.json(store.getAudienceCounts()))
@@ -197,12 +202,24 @@ export function createApp({ store, session }: { store: Store; session: Middlewar
   // ---- signed-in routes -------------------------------------------------------------------
 
   app.use("/api/*", session)
+  // Guests only count as signed in while the running presentation lets them in.
+  app.use("/api/*", async (c, next) => {
+    if (c.get("user")?.guest && !store.guestAccessOpen()) c.set("user", null)
+    await next()
+  })
 
-  app.get("/api/me", (c) => c.json({ user: c.get("user") }))
+  /** `guestAccess`: whether people may join the running presentation with just a name. */
+  app.get("/api/me", (c) => c.json({ user: c.get("user"), guestAccess: store.guestAccessOpen() }))
 
-  // Anyone with a PoliNetwork account may play; activities marked members only take Soci alone.
+  // Anyone with a PoliNetwork account may play, and activities marked members only take Soci
+  // alone. While the running presentation lets guests in, only guests play: accounts are for the admin.
   const audience = new Hono<AppEnv>()
     .use(requireUser(() => true))
+    .use(async (c, next) => {
+      if (!canPlay(store, c.get("user") as SessionUser))
+        throw new HTTPException(403, { message: "This presentation is for guests: join with a name" })
+      await next()
+    })
     .get("/stage", (c) => c.json(audienceView(store, c.get("user") as SessionUser)))
     .post("/respond", async (c) => {
       const user = c.get("user") as SessionUser
@@ -216,7 +233,11 @@ export function createApp({ store, session }: { store: Store; session: Middlewar
     .get("/events", (c) => {
       const user = c.get("user") as SessionUser
       return sse(c, (send) => {
-        const onStage = () => send("stage", audienceView(store, user))
+        const onStage = () => {
+          // Guest access started or ended: the phone goes back to joining (name or sign-in).
+          if (!canPlay(store, user)) send("signed-out", {})
+          else send("stage", audienceView(store, user))
+        }
         // Points only matter to phones for the presentation running now.
         const onLeaderboard = (id: string) => {
           if (id === store.getStage().presentationId) onStage()
@@ -281,7 +302,12 @@ export function createApp({ store, session }: { store: Store; session: Middlewar
   return app
 }
 
-/** Soci, and admins, who can always take part. */
+/** Guests play only while the running presentation lets them in, and accounts only while it does not. */
+function canPlay(store: Store, user: SessionUser) {
+  return Boolean(user.guest) === store.guestAccessOpen()
+}
+
+/** Soci, and admins, who can always take part outside guest presentations. */
 function isMember(user: SessionUser) {
   return user.canParticipate || user.isAdmin
 }

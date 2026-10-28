@@ -3,7 +3,7 @@ import { Link, useLocation } from "wouter"
 import { api, useApi, useEventStream } from "../api.ts"
 import { Rank } from "../audience-ui.tsx"
 import { Icon } from "../icons.tsx"
-import { Button, Card, Field, Input, Tag } from "../ui.tsx"
+import { Button, Card, Field, Input, Tag, Toggle } from "../ui.tsx"
 import {
   ActivityRows,
   type ActivityType,
@@ -100,6 +100,7 @@ export function PresentationList() {
                   {answerCount(answers) && <span>· {answerCount(answers)}</span>}
                 </div>
               </div>
+              {p.guestAccess && <Tag>no sign-in</Tag>}
               {stage?.presentation?.id === p.id && <Tag tone="blue">running</Tag>}
               <span className="relative">
                 <PresentationResetButton presentation={p} onReset={activities.reload} />
@@ -127,9 +128,12 @@ export function PresentationPage({ id }: { id: string }) {
   const [error, setError] = useState<string | null>(null)
   const [resets, setResets] = useState(0)
 
+  // Only when the saved title or slug change, so switching guest access keeps unsaved edits.
+  const savedTitle = loaded.data?.title
+  const savedSlug = loaded.data?.slug
   useEffect(() => {
-    if (loaded.data) setDraft({ title: loaded.data.title, slug: loaded.data.slug })
-  }, [loaded.data])
+    if (savedTitle !== undefined && savedSlug !== undefined) setDraft({ title: savedTitle, slug: savedSlug })
+  }, [savedTitle, savedSlug])
 
   if (loaded.error) return <p className="text-rose-600">{loaded.error.message}</p>
   const presentation = loaded.data
@@ -141,6 +145,20 @@ export function PresentationPage({ id }: { id: string }) {
     try {
       loaded.setData(
         await api<PresentationSummary>(`/api/admin/presentations/${id}`, { method: "PATCH", body: draft }),
+      )
+      setError(null)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    }
+  }
+  // Takes effect right away, so it can be switched on in the middle of a talk.
+  const setGuestAccess = async (guestAccess: boolean) => {
+    try {
+      loaded.setData(
+        await api<PresentationSummary>(`/api/admin/presentations/${id}`, {
+          method: "PATCH",
+          body: { guestAccess },
+        }),
       )
       setError(null)
     } catch (e) {
@@ -215,6 +233,12 @@ export function PresentationPage({ id }: { id: string }) {
                 <Input value={draft.slug} onChange={(e) => setDraft({ ...draft, slug: e.target.value })} />
               </Field>
             </div>
+            <Toggle
+              label="Join without signing in"
+              hint="While this presentation runs, only guests play: phones ask for a name, and the PoliNetwork sign-in stays in a corner for admins. Nobody can answer Soci-only activities. Applies right away."
+              checked={presentation.guestAccess}
+              onChange={(guestAccess) => void setGuestAccess(guestAccess)}
+            />
             {error && <p className="text-sm text-rose-600">{error}</p>}
             <div className="flex flex-wrap gap-2.5 border-t-[1.5px] border-white pt-5">
               <Button variant="primary" disabled={!dirty} onClick={() => void save()}>

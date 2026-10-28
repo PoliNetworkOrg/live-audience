@@ -35,6 +35,8 @@ export interface PresentationSummary {
   id: string
   slug: string
   title: string
+  /** While it runs, people may join with just a name instead of signing in. */
+  guestAccess: boolean
 }
 
 /** Every activity, reloaded when the stage changes or answers are reset. */

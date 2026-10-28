@@ -46,6 +46,8 @@ export interface Presentation {
   id: string
   slug: string
   title: string
+  /** While it runs, people without a PoliNetwork account may join by typing a name. */
+  guestAccess: boolean
   createdAt: number
 }
 
@@ -370,16 +372,31 @@ export class Store {
     return presentation
   }
 
-  createPresentation(input: { title: string; slug: string }): Presentation {
+  createPresentation(input: { title: string; slug: string; guestAccess?: boolean }): Presentation {
     this.assertPresentationSlugFree(input.slug)
-    const presentation: Presentation = { id: randomUUID(), ...input, createdAt: Date.now() }
+    const presentation: Presentation = {
+      id: randomUUID(),
+      title: input.title,
+      slug: input.slug,
+      guestAccess: input.guestAccess ?? false,
+      createdAt: Date.now(),
+    }
     this.db
-      .prepare("INSERT INTO presentations (id, slug, title, created_at) VALUES (?, ?, ?, ?)")
-      .run(presentation.id, presentation.slug, presentation.title, presentation.createdAt)
+      .prepare("INSERT INTO presentations (id, slug, title, guest_access, created_at) VALUES (?, ?, ?, ?, ?)")
+      .run(
+        presentation.id,
+        presentation.slug,
+        presentation.title,
+        presentation.guestAccess ? 1 : 0,
+        presentation.createdAt,
+      )
     return presentation
   }
 
-  updatePresentation(idOrSlug: string, patch: { title?: string; slug?: string }): Presentation {
+  updatePresentation(
+    idOrSlug: string,
+    patch: { title?: string; slug?: string; guestAccess?: boolean },
+  ): Presentation {
     const presentation = this.requirePresentation(idOrSlug)
     if (patch.slug !== undefined && patch.slug !== presentation.slug)
       this.assertPresentationSlugFree(patch.slug)
@@ -387,10 +404,11 @@ export class Store {
       ...presentation,
       title: patch.title ?? presentation.title,
       slug: patch.slug ?? presentation.slug,
+      guestAccess: patch.guestAccess ?? presentation.guestAccess,
     }
     this.db
-      .prepare("UPDATE presentations SET title = ?, slug = ? WHERE id = ?")
-      .run(updated.title, updated.slug, updated.id)
+      .prepare("UPDATE presentations SET title = ?, slug = ?, guest_access = ? WHERE id = ?")
+      .run(updated.title, updated.slug, updated.guestAccess ? 1 : 0, updated.id)
     if (this.getStage().presentationId === updated.id) this.events.emit("stage", this.getStage())
     this.events.emit("leaderboard", updated.id)
     return updated
@@ -872,6 +890,12 @@ export class Store {
     }
   }
 
+  /** Whether the running presentation lets people join with just a name. */
+  guestAccessOpen(): boolean {
+    const presentationId = this.getStage().presentationId
+    return Boolean(presentationId && this.getPresentation(presentationId)?.guestAccess)
+  }
+
   private writeStage(stage: Stage): Stage {
     this.setSetting("stage", stage)
     this.events.emit("stage", stage)
@@ -948,11 +972,18 @@ interface PresentationRow {
   id: string
   slug: string
   title: string
+  guest_access: number
   created_at: number
 }
 
 function toPresentation(row: PresentationRow): Presentation {
-  return { id: row.id, slug: row.slug, title: row.title, createdAt: row.created_at }
+  return {
+    id: row.id,
+    slug: row.slug,
+    title: row.title,
+    guestAccess: row.guest_access === 1,
+    createdAt: row.created_at,
+  }
 }
 
 function toActivity(row: ActivityRow): Activity {
