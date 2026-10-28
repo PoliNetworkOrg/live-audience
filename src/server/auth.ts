@@ -36,10 +36,12 @@ interface Session {
 }
 
 /** What people type to join as guests: one line, a sensible length. */
-export const guestName = z
-  .string()
-  .transform((name) => name.replace(/\s+/g, " ").trim())
-  .pipe(z.string().min(1, "Type your name").max(40, "Keep your name under 40 characters"))
+const guestBody = z.object({
+  name: z
+    .string()
+    .transform((name) => name.replace(/\s+/g, " ").trim())
+    .pipe(z.string().min(1, "Type your name").max(40, "Keep your name under 40 characters")),
+})
 
 export function createAuth(
   env: Env,
@@ -193,12 +195,11 @@ export function createAuth(
     // JSON only: other sites cannot send it with a plain form, so they cannot swap someone's session.
     if (!c.req.header("content-type")?.startsWith("application/json"))
       return c.json({ error: "Send the name as JSON" }, 415)
-    const body = (await c.req.json().catch(() => ({}))) as { name?: unknown }
-    const name = guestName.safeParse(body.name)
-    if (!name.success) return c.json({ error: name.error.issues[0]?.message ?? "Invalid name" }, 400)
+    const body = guestBody.safeParse(await c.req.json().catch(() => ({})))
+    if (!body.success) return c.json({ error: body.error.issues[0]?.message ?? "Invalid name" }, 400)
     const user: SessionUser = {
       id: `guest-${randomUUID()}`,
-      name: name.data,
+      name: body.data.name,
       canParticipate: false,
       isAdmin: false,
       guest: true,

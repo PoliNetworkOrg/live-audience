@@ -85,9 +85,12 @@ export interface Me {
   guest?: boolean
 }
 
-/** `guestAccess`: whether the running presentation lets people join with just a name. */
+/**
+ * `guestAccess`: whether the running presentation lets people join with just a name.
+ * `playing`: whether `user` may answer now (only guests while guests may join, only accounts otherwise).
+ */
 export function useMe() {
-  return useApi<{ user: Me | null; guestAccess: boolean }>("/api/me")
+  return useApi<{ user: Me | null; guestAccess: boolean; playing: boolean }>("/api/me")
 }
 
 export async function joinAsGuest(name: string) {

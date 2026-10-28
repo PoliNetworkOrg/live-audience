@@ -27,10 +27,8 @@ export function AudiencePage() {
   const me = useMe()
   const user = me.data?.user
   const guestAccess = me.data?.guestAccess ?? false
+  const playing = me.data?.playing ?? false
   const { reload } = me
-
-  // While guests may join, only guests play: accounts are there for the admin.
-  const playing = Boolean(user) && Boolean(user?.guest) === guestAccess
 
   // Not playing, phones wait for the presenter to let people in with just a name (or stop doing so).
   useEffect(() => {
@@ -41,8 +39,8 @@ export function AudiencePage() {
 
   let content: ReactNode
   if (me.loading && !me.data) content = <Spinner />
-  else if (user && playing) content = <Live me={user} onSignedOut={reload} />
-  else content = guestAccess ? <JoinAsGuest signedIn={Boolean(user)} onJoined={reload} /> : <SignIn />
+  else if (user && playing) content = <Live me={user} onRejoin={reload} />
+  else content = guestAccess ? <JoinAsGuest signedIn={Boolean(user)} reload={reload} /> : <SignIn />
 
   return (
     <div className="relative flex min-h-dvh flex-col text-slate-950">
@@ -59,7 +57,7 @@ export function AudiencePage() {
   )
 }
 
-function Live({ me, onSignedOut }: { me: Me; onSignedOut: () => void }) {
+function Live({ me, onRejoin }: { me: Me; onRejoin: () => void }) {
   const [stage, setStage] = useState<AudienceStage | null>(null)
   const [error, setError] = useState<string | null>(null)
   const connected = useEventStream("/api/audience/events", {
@@ -67,8 +65,8 @@ function Live({ me, onSignedOut }: { me: Me; onSignedOut: () => void }) {
       setStage(data)
       setError(null)
     },
-    // Guests, once the presentation stops letting people in without an account.
-    "signed-out": onSignedOut,
+    // Guest access started or ended: this phone has to join again.
+    rejoin: onRejoin,
   })
 
   if (!stage) return <Spinner />
@@ -140,6 +138,10 @@ function Live({ me, onSignedOut }: { me: Me; onSignedOut: () => void }) {
   )
 }
 
+/** The one thing to do on the screens before joining. */
+const BIG_BUTTON =
+  "inline-flex w-full items-center justify-center gap-2 rounded-full bg-pn px-6 py-4 font-headline text-lg font-medium text-white shadow-[0_16px_32px_-16px_rgb(17_86_174/0.8)] transition hover:bg-pn-deep active:scale-[0.98]"
+
 function SignIn() {
   return (
     <Centered
@@ -152,10 +154,7 @@ function SignIn() {
       }
       text="Sign in with your PoliNetwork account to vote, answer and play along."
       footer={
-        <a
-          href={loginUrl("/")}
-          className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-pn px-6 py-4 font-headline text-lg font-medium text-white shadow-[0_16px_32px_-16px_rgb(17_86_174/0.8)] transition hover:bg-pn-deep active:scale-[0.98]"
-        >
+        <a href={loginUrl("/")} className={BIG_BUTTON}>
           Sign in with PoliNetwork
           <Icon name="arrow-right" className="size-5" />
         </a>
@@ -165,7 +164,7 @@ function SignIn() {
 }
 
 /** While guests may join: a name is all it takes. The PoliNetwork sign-in waits in the corner. */
-function JoinAsGuest({ signedIn, onJoined }: { signedIn: boolean; onJoined: () => void }) {
+function JoinAsGuest({ signedIn, reload }: { signedIn: boolean; reload: () => void }) {
   const [name, setName] = useState("")
   const [error, setError] = useState<string | null>(null)
   const [joining, setJoining] = useState(false)
@@ -173,13 +172,12 @@ function JoinAsGuest({ signedIn, onJoined }: { signedIn: boolean; onJoined: () =
     setJoining(true)
     try {
       await joinAsGuest(name)
-      onJoined()
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something went wrong")
-      // Guest access may have just ended: show the sign-in instead.
-      onJoined()
     } finally {
       setJoining(false)
+      // Joined, or guest access may have just ended: either way the page changes.
+      reload()
     }
   }
   return (
@@ -212,7 +210,7 @@ function JoinAsGuest({ signedIn, onJoined }: { signedIn: boolean; onJoined: () =
           <button
             type="submit"
             disabled={!name.trim() || joining}
-            className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-pn px-6 py-4 font-headline text-lg font-medium text-white shadow-[0_16px_32px_-16px_rgb(17_86_174/0.8)] transition hover:bg-pn-deep active:scale-[0.98] disabled:opacity-50"
+            className={cx(BIG_BUTTON, "disabled:opacity-50")}
           >
             Join
             <Icon name="arrow-right" className="size-5" />
@@ -249,7 +247,7 @@ function SociOnly({ guest }: { guest?: boolean }) {
         icon="lock"
         kicker="Soci only"
         title="This one is for Soci"
-        text="This one is not open to guests. Keep this page open: the next game is coming up."
+        text="Guests cannot answer this one. Keep this page open: the next game is coming up."
       />
     )
   }

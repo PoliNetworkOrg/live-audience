@@ -208,8 +208,14 @@ export function createApp({ store, session }: { store: Store; session: Middlewar
     await next()
   })
 
-  /** `guestAccess`: whether people may join the running presentation with just a name. */
-  app.get("/api/me", (c) => c.json({ user: c.get("user"), guestAccess: store.guestAccessOpen() }))
+  /**
+   * `guestAccess`: whether people may join the running presentation with just a name.
+   * `playing`: whether this user may use the audience routes now.
+   */
+  app.get("/api/me", (c) => {
+    const user = c.get("user")
+    return c.json({ user, guestAccess: store.guestAccessOpen(), playing: !!user && canPlay(store, user) })
+  })
 
   // Anyone with a PoliNetwork account may play, and activities marked members only take Soci
   // alone. While the running presentation lets guests in, only guests play: accounts are for the admin.
@@ -234,8 +240,8 @@ export function createApp({ store, session }: { store: Store; session: Middlewar
       const user = c.get("user") as SessionUser
       return sse(c, (send) => {
         const onStage = () => {
-          // Guest access started or ended: the phone goes back to joining (name or sign-in).
-          if (!canPlay(store, user)) send("signed-out", {})
+          // Guest access started or ended: the phone has to join again (with a name or the sign-in).
+          if (!canPlay(store, user)) send("rejoin", {})
           else send("stage", audienceView(store, user))
         }
         // Points only matter to phones for the presentation running now.
