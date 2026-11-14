@@ -94,7 +94,10 @@ export function ActivityEditor({ id }: { id: string }) {
             </Button>
           </div>
         </Card>
-        <ResultsPanel activity={loaded.data} />
+        <div className="space-y-6">
+          <ResultsPanel activity={loaded.data} />
+          {ui?.Admin && <ui.Admin activityId={id} config={loaded.data.config} />}
+        </div>
       </div>
     </div>
   )

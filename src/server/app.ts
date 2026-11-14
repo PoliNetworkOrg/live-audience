@@ -162,6 +162,20 @@ export function createApp({ store, session }: { store: Store; session: Middlewar
     })
   app.route("/api/audience", audience)
 
+  // Secret Santa runs off stage and is open to anyone signed in, not only the audience role.
+  const santa = new Hono<AppEnv>()
+    .use(requireUser(() => true))
+    .get("/", (c) => c.json(store.listSecretSantas((c.get("user") as SessionUser).id)))
+    .put("/:id/entry", async (c) => {
+      const user = c.get("user") as SessionUser
+      const body = await c.req.json().catch(() => null)
+      return c.json(store.joinSecretSanta(c.req.param("id"), user, body))
+    })
+    .delete("/:id/entry", (c) =>
+      c.json(store.withdrawSecretSanta(c.req.param("id"), (c.get("user") as SessionUser).id)),
+    )
+  app.route("/api/secret-santa", santa)
+
   const admin = new Hono<AppEnv>()
     .use(requireUser((u) => u.isAdmin))
     .get("/types", (c) =>
@@ -184,6 +198,18 @@ export function createApp({ store, session }: { store: Store; session: Middlewar
       store.deleteActivity(c.req.param("id"))
       return c.body(null, 204)
     })
+    .get("/secret-santa/:id", (c) => c.json(store.getSecretSantaAdmin(c.req.param("id"))))
+    .post("/secret-santa/:id/draw", (c) => {
+      store.drawSecretSanta(c.req.param("id"))
+      return c.json(store.getSecretSantaAdmin(c.req.param("id")))
+    })
+    .post("/secret-santa/:id/gadget-draw", (c) => {
+      store.drawSecretSantaGadget(c.req.param("id"))
+      return c.json(store.getSecretSantaAdmin(c.req.param("id")))
+    })
+    .delete("/secret-santa/:id/participants/:userId", (c) =>
+      c.json(store.removeSecretSantaParticipant(c.req.param("id"), c.req.param("userId"))),
+    )
     .get("/api-key", (c) => c.json({ apiKey: store.getApiKey() }))
     .post("/api-key", (c) => c.json({ apiKey: store.regenerateApiKey() }))
     .route("/", control)

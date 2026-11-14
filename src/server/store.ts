@@ -18,6 +18,17 @@ import {
   numberLottery,
 } from "../activities/number-lottery/definition.ts"
 import { getActivityDefinition } from "../activities/registry.ts"
+import {
+  buildCycle,
+  pickWinners,
+  type SecretSantaConfig,
+  type SecretSantaDraw,
+  type SecretSantaEntry,
+  type SecretSantaGadgetDraw,
+  type SecretSantaView,
+  secretSanta,
+  withdrawFromCycle,
+} from "../activities/secret-santa/definition.ts"
 import type { StoredResponse } from "../activities/types.ts"
 import type { Database } from "./db.ts"
 
@@ -182,6 +193,7 @@ export class Store {
     this.db.prepare("DELETE FROM activities WHERE id = ?").run(activity.id)
     this.db.prepare("DELETE FROM settings WHERE key = ?").run(`number-draw:${activity.id}`)
     this.db.prepare("DELETE FROM settings WHERE key = ?").run(`quiz-draw:${activity.id}`)
+    this.deleteSecretSantaDraws(activity.id)
   }
 
   private assertSlugFree(slug: string) {
@@ -258,6 +270,7 @@ export class Store {
     this.db.prepare("DELETE FROM responses WHERE activity_id = ?").run(activity.id)
     this.db.prepare("DELETE FROM settings WHERE key = ?").run(`number-draw:${activity.id}`)
     this.db.prepare("DELETE FROM settings WHERE key = ?").run(`quiz-draw:${activity.id}`)
+    this.deleteSecretSantaDraws(activity.id)
     this.events.emit("results", activity.id)
     if (
       [numberLottery.type, numberEstimate.type, memoryQuiz.type].includes(activity.type) &&
@@ -287,7 +300,13 @@ export class Store {
               ...definition.aggregate(activity.config, this.listResponses(activity.id)),
               draw: this.getSetting<MemoryQuizDraw>(`quiz-draw:${activity.id}`) ?? null,
             }
-          : definition.aggregate(activity.config, this.listResponses(activity.id)),
+          : activity.type === secretSanta.type
+            ? {
+                ...definition.aggregate(activity.config, this.listResponses(activity.id)),
+                drawn: Boolean(this.getSetting(`santa-draw:${activity.id}`)),
+                gadgetDrawn: Boolean(this.getSetting(`santa-gadget:${activity.id}`)),
+              }
+            : definition.aggregate(activity.config, this.listResponses(activity.id)),
     }
   }
 
@@ -327,7 +346,9 @@ export class Store {
       ? this.drawQuiz(idOrSlug)
       : type === numberEstimate.type
         ? this.drawEstimate(idOrSlug)
-        : this.drawNumber(idOrSlug)
+        : type === secretSanta.type
+          ? this.drawSecretSanta(idOrSlug)
+          : this.drawNumber(idOrSlug)
   }
 
   /** Reveal a configured real figure without exposing other participants' guesses. */
@@ -403,6 +424,9 @@ export class Store {
   }
 
   private assertCanOpen(activity: Activity) {
+    if (activity.type === secretSanta.type) {
+      throw new StoreError(409, "Secret Santa runs off stage: make it visible on the home page instead")
+    }
     if (
       [numberLottery.type, numberEstimate.type].includes(activity.type) &&
       this.getSetting(`number-draw:${activity.id}`)
@@ -428,6 +452,186 @@ export class Store {
       if (!parsed.success)
         throw new StoreError(400, "Save a valid quiz before opening answers", parsed.error.issues)
     }
+  }
+
+  // ---- secret santa ----------------------------------------------------------------------
+
+  /** Every visible Secret Santa, as `userId` sees it. */
+  listSecretSantas(userId: string): SecretSantaView[] {
+    return this.listActivities()
+      .filter((activity) => activity.type === secretSanta.type)
+      .flatMap((activity) => {
+        const config = secretSanta.configSchema.parse(activity.config)
+        return config.visible ? [this.secretSantaView(activity, config, userId)] : []
+      })
+  }
+
+  /** Signs `user` up, or updates what they wrote. New people only until the draw. */
+  joinSecretSanta(idOrSlug: string, user: { id: string; name: string }, entry: unknown): SecretSantaView {
+    const { activity, config } = this.requireVisibleSecretSanta(idOrSlug)
+    const parsed = secretSanta.responseSchema(config).safeParse(entry)
+    if (!parsed.success) throw new StoreError(400, "Invalid entry", parsed.error.issues)
+    const existing = this.getResponse(activity.id, user.id) as SecretSantaEntry | null
+    if (!existing && (!config.signupsOpen || this.getSetting(`santa-draw:${activity.id}`))) {
+      throw new StoreError(409, "Sign-ups are closed")
+    }
+    // Once the gadget is drawn, joining or leaving it would change who could have won.
+    const data =
+      existing && this.getSetting(`santa-gadget:${activity.id}`)
+        ? { ...parsed.data, gadget: existing.gadget }
+        : parsed.data
+    this.db
+      .prepare(
+        `INSERT INTO responses (activity_id, user_id, user_name, response, updated_at) VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT (activity_id, user_id) DO UPDATE SET
+           user_name = excluded.user_name, response = excluded.response, updated_at = excluded.updated_at`,
+      )
+      .run(activity.id, user.id, user.name, JSON.stringify(data), Date.now())
+    this.events.emit("results", activity.id)
+    return this.secretSantaView(activity, config, user.id)
+  }
+
+  /** The person leaves. After the draw only whoever was giving them a gift gets a new match. */
+  withdrawSecretSanta(idOrSlug: string, userId: string): SecretSantaView {
+    const { activity, config } = this.requireVisibleSecretSanta(idOrSlug)
+    this.removeSecretSantaEntry(activity.id, userId)
+    return this.secretSantaView(activity, config, userId)
+  }
+
+  /** Admin: takes someone out, exactly as if they had withdrawn. */
+  removeSecretSantaParticipant(idOrSlug: string, userId: string) {
+    const { activity } = this.requireSecretSanta(idOrSlug)
+    this.removeSecretSantaEntry(activity.id, userId)
+    return this.getSecretSantaAdmin(activity.id)
+  }
+
+  /** One random gift cycle among everyone signed up. Closes sign-ups; idempotent. */
+  drawSecretSanta(idOrSlug: string) {
+    const { activity } = this.requireSecretSanta(idOrSlug)
+    if (!this.getSetting(`santa-draw:${activity.id}`)) {
+      const ids = this.listResponses(activity.id).map(({ userId }) => userId)
+      if (ids.length < 2) throw new StoreError(409, "At least two people must sign up first")
+      const draw: SecretSantaDraw = {
+        drawnAt: Date.now(),
+        assignments: buildCycle(ids, (size) => randomInt(size)),
+      }
+      this.setSetting(`santa-draw:${activity.id}`, draw)
+      this.events.emit("results", activity.id)
+    }
+    return this.getResults(activity.id)
+  }
+
+  /** Draws the gadget winners among the people who entered it. Idempotent. */
+  drawSecretSantaGadget(idOrSlug: string) {
+    const { activity, config } = this.requireSecretSanta(idOrSlug)
+    if (!config.gadget.enabled) throw new StoreError(409, "The gadget draw is turned off")
+    if (!this.getSetting(`santa-gadget:${activity.id}`)) {
+      const entrants = (this.listResponses(activity.id) as StoredResponse<SecretSantaEntry>[])
+        .filter(({ response }) => response.gadget)
+        .map(({ userId }) => userId)
+      if (!entrants.length) throw new StoreError(409, "Nobody entered the gadget draw yet")
+      const draw: SecretSantaGadgetDraw = {
+        drawnAt: Date.now(),
+        winners: pickWinners(entrants, config.gadget.winners, (size) => randomInt(size)),
+      }
+      this.setSetting(`santa-gadget:${activity.id}`, draw)
+      this.events.emit("results", activity.id)
+    }
+    return this.getResults(activity.id)
+  }
+
+  /** Admin only: who signed up and who won the gadget. Never who gives a gift to whom. */
+  getSecretSantaAdmin(idOrSlug: string) {
+    const { activity } = this.requireSecretSanta(idOrSlug)
+    const responses = this.listResponses(activity.id) as StoredResponse<SecretSantaEntry>[]
+    const draw = this.getSetting<SecretSantaDraw>(`santa-draw:${activity.id}`)
+    const gadget = this.getSetting<SecretSantaGadgetDraw>(`santa-gadget:${activity.id}`)
+    const nameOf = (userId: string) => responses.find((r) => r.userId === userId)?.userName ?? "(withdrawn)"
+    return {
+      drawnAt: draw?.drawnAt ?? null,
+      participants: responses
+        .map(({ userId, userName, response }) => ({
+          userId,
+          name: userName,
+          gadget: response.gadget,
+          /** false: drawn, but a withdrawal left this person nobody to give a gift to. */
+          hasMatch: draw ? Boolean(draw.assignments[userId]) : null,
+        }))
+        .sort((a, b) => a.name.localeCompare(b.name)),
+      gadget: gadget
+        ? { drawnAt: gadget.drawnAt, winners: gadget.winners.map((id) => ({ userId: id, name: nameOf(id) })) }
+        : null,
+    }
+  }
+
+  private requireSecretSanta(idOrSlug: string) {
+    const activity = this.requireActivity(idOrSlug)
+    if (activity.type !== secretSanta.type) throw new StoreError(400, "This activity is not a Secret Santa")
+    return { activity, config: secretSanta.configSchema.parse(activity.config) }
+  }
+
+  private requireVisibleSecretSanta(idOrSlug: string) {
+    const found = this.requireSecretSanta(idOrSlug)
+    if (!found.config.visible) throw new StoreError(404, `No activity "${idOrSlug}"`)
+    return found
+  }
+
+  private removeSecretSantaEntry(activityId: string, userId: string) {
+    if (!this.getResponse(activityId, userId)) throw new StoreError(404, "Not signed up")
+    const draw = this.getSetting<SecretSantaDraw>(`santa-draw:${activityId}`)
+    const gadget = this.getSetting<SecretSantaGadgetDraw>(`santa-gadget:${activityId}`)
+    this.db.exec("BEGIN")
+    try {
+      this.db.prepare("DELETE FROM responses WHERE activity_id = ? AND user_id = ?").run(activityId, userId)
+      if (draw) {
+        this.setSetting(`santa-draw:${activityId}`, {
+          ...draw,
+          assignments: withdrawFromCycle(draw.assignments, userId),
+        })
+      }
+      if (gadget) {
+        this.setSetting(`santa-gadget:${activityId}`, {
+          ...gadget,
+          winners: gadget.winners.filter((id) => id !== userId),
+        })
+      }
+      this.db.exec("COMMIT")
+    } catch (error) {
+      this.db.exec("ROLLBACK")
+      throw error
+    }
+    this.events.emit("results", activityId)
+  }
+
+  private secretSantaView(activity: Activity, config: SecretSantaConfig, userId: string): SecretSantaView {
+    const responses = this.listResponses(activity.id) as StoredResponse<SecretSantaEntry>[]
+    const mine = responses.find((r) => r.userId === userId)
+    const draw = this.getSetting<SecretSantaDraw>(`santa-draw:${activity.id}`)
+    const gadget = this.getSetting<SecretSantaGadgetDraw>(`santa-gadget:${activity.id}`)
+    const receiverId = mine && draw ? (draw.assignments[userId] ?? null) : null
+    const receiver = receiverId ? responses.find((r) => r.userId === receiverId) : undefined
+    return {
+      id: activity.id,
+      title: activity.title,
+      config,
+      participants: responses.length,
+      drawn: Boolean(draw),
+      gadgetDrawn: Boolean(gadget),
+      canJoin: config.signupsOpen && !draw,
+      entry: mine?.response ?? null,
+      match: receiver
+        ? { name: receiver.userName, likes: receiver.response.likes, dislikes: receiver.response.dislikes }
+        : null,
+      gadgetWon:
+        mine && gadget && config.gadget.enabled && mine.response.gadget
+          ? gadget.winners.includes(userId)
+          : null,
+    }
+  }
+
+  private deleteSecretSantaDraws(activityId: string) {
+    this.db.prepare("DELETE FROM settings WHERE key = ?").run(`santa-draw:${activityId}`)
+    this.db.prepare("DELETE FROM settings WHERE key = ?").run(`santa-gadget:${activityId}`)
   }
 
   // ---- stage -----------------------------------------------------------------------------

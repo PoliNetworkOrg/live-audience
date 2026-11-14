@@ -49,3 +49,267 @@
 .animate-pop-in {
   animation: pop-in 0.35s cubic-bezier(0.2, 0.9, 0.3, 1.2) both;
 }
+
+/* ---- Secret Santa ------------------------------------------------------------------------ */
+
+@keyframes snow {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(var(--drift, 0), var(--fall, 70rem), 0);
+  }
+}
+
+@keyframes xmas-twinkle {
+  0%,
+  100% {
+    opacity: 0.25;
+    transform: scale(0.8);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes xmas-bulb {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+
+@keyframes xmas-smoke {
+  0% {
+    opacity: 0;
+    transform: translate(0, 0) scale(0.6);
+  }
+  30% {
+    opacity: 0.7;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(6px, -24px) scale(1.6);
+  }
+}
+
+@keyframes xmas-window {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  45% {
+    opacity: 0.75;
+  }
+}
+
+/* A gentle nudge every few seconds: "open me". */
+@keyframes xmas-wobble {
+  0%,
+  78%,
+  100% {
+    transform: rotate(0);
+  }
+  82% {
+    transform: rotate(-5deg);
+  }
+  86% {
+    transform: rotate(4deg);
+  }
+  90% {
+    transform: rotate(-2.5deg);
+  }
+  94% {
+    transform: rotate(1.5deg);
+  }
+}
+
+@keyframes xmas-shake {
+  0%,
+  100% {
+    transform: translateX(0) rotate(0);
+  }
+  15% {
+    transform: translateX(-5px) rotate(-5deg);
+  }
+  30% {
+    transform: translateX(5px) rotate(5deg);
+  }
+  45% {
+    transform: translateX(-4px) rotate(-3deg);
+  }
+  60% {
+    transform: translateX(3px) rotate(2deg);
+  }
+  75% {
+    transform: translateX(0) rotate(0) scale(1.04);
+  }
+}
+
+@keyframes xmas-lid-off {
+  to {
+    transform: translate(30px, -110px) rotate(32deg);
+    opacity: 0;
+  }
+}
+
+@keyframes xmas-burst {
+  from {
+    transform: translate(0, 0) scale(0.3) rotate(0);
+    opacity: 1;
+  }
+  70% {
+    opacity: 1;
+  }
+  to {
+    transform: translate(var(--x), var(--y)) scale(1) rotate(var(--r));
+    opacity: 0;
+  }
+}
+
+@keyframes xmas-rise {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes xmas-tag {
+  from {
+    opacity: 0;
+    transform: translateY(60px) scale(0.85) rotate(-6deg);
+  }
+  to {
+    opacity: 1;
+    transform: rotate(-1.5deg);
+  }
+}
+
+@keyframes xmas-stamp {
+  0% {
+    opacity: 0;
+    transform: scale(2) rotate(-24deg);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(0.94) rotate(-12deg);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) rotate(-12deg);
+  }
+}
+
+@keyframes xmas-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.4) translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes xmas-shimmer {
+  0%,
+  55% {
+    transform: translateX(0) skewX(-20deg);
+  }
+  100% {
+    transform: translateX(450%) skewX(-20deg);
+  }
+}
+
+.xmas-snow {
+  animation: snow 12s linear infinite;
+}
+.xmas-twinkle {
+  animation: xmas-twinkle 3s ease-in-out infinite;
+}
+.xmas-bulb {
+  animation: xmas-bulb 2.4s ease-in-out infinite;
+}
+.xmas-star {
+  animation: xmas-twinkle 2.8s ease-in-out infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+.xmas-smoke {
+  animation: xmas-smoke 3.3s ease-out infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+.xmas-window {
+  animation: xmas-window 4s ease-in-out infinite;
+}
+.xmas-wobble {
+  animation: xmas-wobble 4.5s ease-in-out infinite;
+  transform-origin: 50% 90%;
+}
+.xmas-shake {
+  animation: xmas-shake 0.5s ease-in-out both;
+  transform-origin: 50% 90%;
+}
+.xmas-lid-off {
+  animation: xmas-lid-off 0.5s cubic-bezier(0.3, 0.7, 0.4, 1) 0.45s both;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+.xmas-burst {
+  animation: xmas-burst 1.1s cubic-bezier(0.15, 0.8, 0.3, 1) 0.5s both;
+}
+.xmas-rise {
+  animation: xmas-rise 0.5s cubic-bezier(0.2, 0.8, 0.3, 1) both;
+}
+.xmas-tag {
+  animation: xmas-tag 0.7s cubic-bezier(0.2, 1.1, 0.35, 1) both;
+}
+.xmas-stamp {
+  animation: xmas-stamp 0.45s cubic-bezier(0.3, 1.4, 0.5, 1) 0.3s both;
+}
+.xmas-pop {
+  animation: xmas-pop 0.35s cubic-bezier(0.3, 1.4, 0.5, 1) both;
+}
+.xmas-shimmer {
+  animation: xmas-shimmer 3.2s ease-in-out infinite;
+}
+
+/* Reduced motion: decorations hold still, content just appears. */
+@media (prefers-reduced-motion: reduce) {
+  .xmas-snow {
+    display: none;
+  }
+  .xmas-twinkle,
+  .xmas-bulb,
+  .xmas-star,
+  .xmas-smoke,
+  .xmas-window,
+  .xmas-wobble,
+  .xmas-shake,
+  .xmas-lid-off,
+  .xmas-burst,
+  .xmas-rise,
+  .xmas-tag,
+  .xmas-stamp,
+  .xmas-pop,
+  .xmas-shimmer {
+    animation: none;
+  }
+  .xmas-burst,
+  .xmas-shimmer,
+  .xmas-smoke {
+    display: none;
+  }
+  .xmas-tag {
+    transform: rotate(-1.5deg);
+  }
+}

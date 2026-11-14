@@ -3,6 +3,7 @@ import { numberEstimateUI } from "./number-estimate/ui.tsx"
 import { numberLotteryUI } from "./number-lottery/ui.tsx"
 import { pollUI } from "./poll/ui.tsx"
 import { purchaseInterestUI } from "./purchase-interest/ui.tsx"
+import { secretSantaUI } from "./secret-santa/ui.tsx"
 import type { AnyActivityUI } from "./ui-types.ts"
 import { wheelUI } from "./wheel/ui.tsx"
 import { wordCloudUI } from "./word-cloud/ui.tsx"
@@ -14,6 +15,7 @@ export const activityUIs: Record<string, AnyActivityUI> = {
   [numberLotteryUI.definition.type]: numberLotteryUI,
   [pollUI.definition.type]: pollUI,
   [purchaseInterestUI.definition.type]: purchaseInterestUI,
+  [secretSantaUI.definition.type]: secretSantaUI,
   [wheelUI.definition.type]: wheelUI,
   [wordCloudUI.definition.type]: wordCloudUI,
 }

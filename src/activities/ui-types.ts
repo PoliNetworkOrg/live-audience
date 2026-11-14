@@ -21,6 +21,8 @@ export interface ActivityUI<Config = unknown, Response = unknown, Results = unkn
     submit: (response: Response) => Promise<void>
   }>
   Results?: ComponentType<{ config: Config; results: Results }>
+  /** Extra admin controls for types that need more than results, e.g. draws run from the admin page. */
+  Admin?: ComponentType<{ activityId: string; config: Config }>
 }
 
 export function defineActivityUI<Config, Response, Results>(

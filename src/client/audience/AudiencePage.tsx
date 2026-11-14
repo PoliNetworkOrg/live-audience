@@ -1,4 +1,5 @@
 import { type ReactNode, useState } from "react"
+import { SecretSantaHome } from "../../activities/secret-santa/ui.tsx"
 import { activityUIs } from "../../activities/ui-registry.ts"
 import { api, loginUrl, logout, type Me, useEventStream, useMe } from "../api.ts"
 
@@ -16,8 +17,15 @@ export function AudiencePage() {
   let content: ReactNode
   if (me.loading && !me.data) content = <Spinner />
   else if (!user) content = <SignIn />
-  else if (!user.canParticipate && !user.isAdmin) content = <NotAMember />
-  else content = <Live />
+  // Secret Santa is off stage and open to everyone signed in: non-members see it instead of the lock.
+  else if (!user.canParticipate && !user.isAdmin) content = <SecretSantaHome empty={<NotAMember />} />
+  else
+    content = (
+      <>
+        <SecretSantaHome />
+        <Live />
+      </>
+    )
 
   return (
     <div className="relative flex min-h-dvh flex-col bg-brand-950 text-white">
@@ -32,7 +40,7 @@ export function AudiencePage() {
         {user && <UserMenu user={user} />}
       </header>
       <main className="relative z-10 mx-auto flex w-full max-w-lg flex-1 flex-col justify-center px-5 pt-4 pb-[max(2rem,env(safe-area-inset-bottom))]">
-        {content}
+        <div className="space-y-10">{content}</div>
       </main>
     </div>
   )
