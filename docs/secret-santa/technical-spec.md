@@ -13,3 +13,16 @@ Live invoca un endpoint email dedicato del backend tramite credenziale condivisa
 Le mail di avviso/rimozione riutilizzano il layout natalizio del backend. La mail di riassegnazione distingue ritiro volontario da mancata conferma e non rivela il nuovo destinatario.
 
 Verifica: test Store/API con orologio controllato e database in memoria; job con mailer simulato, retry e riavvio; transizioni all'istante limite; CET/CEST; conferme mantenute dopo ricucitura; errori e autenticazione del trasporto; rendering HTML/testo dei template; UI con API simulate. Nessun test invia mail o modifica produzione.
+
+## Pannello organizzatori
+
+Estendere solo le rotte protette admin. La vista restituisce destinatari, iscrizioni, conferme e riepiloghi,
+oltre a una revisione calcolata sullo stato dei partecipanti, sorteggio, conferme, rimozioni e configurazione.
+Le nuove mutazioni richiedono revisione attesa e motivo; conflitti ritornano 409. Gli abbinamenti inviati
+devono includere esattamente i partecipanti attivi e formare un unico ciclo senza autoassegnazioni o
+destinatari duplicati (nessuna assegnazione nel caso vuoto/singolo). Il salvataggio e le notifiche sono atomici.
+
+Una migrazione aggiunge la cronologia degli interventi manuali, privata e legata all'attività. Nessun
+nuovo pacchetto o servizio. La mail di riassegnazione aggiunge il motivo `admin`. Test: permessi e assenza
+di dati privati nelle altre API; modifiche valide/invalide e concorrenti; conferme mantenute; notifiche
+solo per i destinatari effettivamente cambiati; cronologia persistente e accessibile solo agli admin.

@@ -12,3 +12,20 @@ Stato: implementato e verificato. Regole approvate il 14 novembre 2026.
 - Ritiri volontari e letterine bloccate dopo l'estrazione restano disponibili come prima. Se resta una sola persona non viene assegnata a sé stessa; il sito e la notifica rimandano agli organizzatori.
 
 Accettazione: iscrizione gadget senza estrazione/biglietto; conferma persistente e solo propria; scadenze italiane anche durante cambi d'ora; tolleranza fino a mezzanotte; rimozione visibile e non reiscrivibile dopo il sorteggio; ciclo valido dopo rimozioni contigue/totali; notifiche ritentate senza duplicazioni ordinarie; nessuna coppia o email nelle API delle presentazioni.
+
+## Gestione degli organizzatori
+
+Nuovo requisito: gli admin vedono tutti gli abbinamenti, le letterine e gli stati, per gestire casi particolari.
+Il limite «ognuno vede solo il proprio destinatario» resta valido per i partecipanti. L'API delle presentazioni
+continua a esporre solo contatori aggregati.
+
+Il pannello mostra iscritti attivi, confermati, da confermare, senza destinatario, rimossi e adesioni gadget,
+con ricerca e filtri. Gli organizzatori possono correggere abbinamenti e conferme e rimuovere partecipanti.
+La conferma già data viene mantenuta quando cambia il destinatario. Le modifiche agli abbinamenti
+sono applicate insieme, previa anteprima, motivo e controllo che il ciclo resti valido. Le persone
+coinvolte vengono avvisate con una mail che parla di intervento degli organizzatori, senza inventare un ritiro.
+
+Gli interventi manuali registrano autore, data e motivo. Un salvataggio da una schermata superata viene
+rifiutato e richiede di ricaricare, preservando le modifiche effettuate da un altro organizzatore o dal job.
+
+Decisione aperta: includere anche correzione delle letterine e riammissione di rimossi/ritirati.

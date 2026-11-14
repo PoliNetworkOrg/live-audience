@@ -53,7 +53,7 @@ export function AdminLayout({ children }: { children: ReactNode }) {
     <StageContext.Provider value={stage}>
       <div className="min-h-dvh bg-slate-50 text-slate-900">
         <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/90 backdrop-blur">
-          <div className="mx-auto flex max-w-5xl items-center gap-4 px-4 py-2">
+          <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-4 px-4 py-2">
             <Link href="/" className="flex items-center gap-2 font-semibold">
               <img src="/logo.png" alt="" className="size-6 rounded-full" />
               Live admin

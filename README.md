@@ -87,7 +87,15 @@ cause a retry. The backend supplies stable Message-IDs for reconciliation.
 
 Email links require sign-in and an explicit confirmation button. Opening a link or email cannot confirm
 a gift. The date field is an ISO instant; midnight is calculated in Europe/Rome, including DST changes.
-Reset/undo starts a new round and clears confirmations and removal notices. See `docs/secret-santa/`.
+The Secret Santa activity editor includes an admin-only operations panel with participant/confirmation
+counters, both directions of every gift assignment, contact details, full letters, search and status filters.
+Organizers can reorder the gift cycle with a preview, correct a gift confirmation, or remove a participant.
+Corrections require a reason and reject stale snapshots. Assignment changes keep existing confirmations
+and notify affected participants; manual interventions are recorded with author, time and before/after values.
+The panel currently has no reinstatement or letter-editing action.
+
+Reset/undo starts a new round and clears confirmations and removal notices. Intervention history is retained
+until the activity is deleted. See `docs/secret-santa/`.
 
 ```sh
 docker build -t live-audience .

@@ -128,7 +128,11 @@ describe("secret santa", () => {
     for (const id of ["a", "b", "c", "d"]) await join(id)
     const results = (await call(`/api/admin/secret-santa/${activity.id}/draw`, "admin", "POST")).json
     expect(results.drawnAt).toEqual(expect.any(Number))
-    expect(JSON.stringify(results)).not.toMatch(/likes of|match|assign/)
+    expect(
+      results.participants.every(
+        (p: { match: unknown; entry: { likes: string } }) => p.match && p.entry.likes,
+      ),
+    ).toBe(true)
 
     const matches = await cycleFrom(call, ["a", "b", "c", "d"])
     expect(Object.values(matches).sort()).toEqual(["a", "b", "c", "d"])

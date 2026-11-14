@@ -1,8 +1,9 @@
-import { type ReactNode, useState } from "react"
+import type { ReactNode } from "react"
 import { Link } from "wouter"
-import { api, useApi, useEventStream } from "../../client/api.ts"
-import { Button, Card, Field, Input, Textarea } from "../../client/ui.tsx"
+import { useApi } from "../../client/api.ts"
+import { Field, Input, Textarea } from "../../client/ui.tsx"
 import { defineActivityUI } from "../ui-types.ts"
+import { SecretSantaAdmin } from "./admin.tsx"
 import { Snowfall, StringLights, TreeIllustration, XMAS } from "./decorations.tsx"
 import {
   GADGET_NAME,
@@ -135,143 +136,6 @@ function Results({ config, results }: { config: SecretSantaConfig; results: Secr
   )
 }
 
-interface AdminView {
-  drawnAt: number | null
-  withoutEmail: number
-  emailsSent: number
-  participants: {
-    userId: string
-    name: string
-    gadget: boolean
-    hasMatch: boolean | null
-    giftConfirmedAt: number | null
-  }[]
-  removed: { userId: string; name: string; at: number }[]
-  gadget: { drawnAt: number; winners: { userId: string; name: string }[] } | null
-}
-
-function Admin({ activityId, config }: { activityId: string; config: SecretSantaConfig }) {
-  const view = useApi<AdminView>(`/api/admin/secret-santa/${activityId}`)
-  const [error, setError] = useState<string | null>(null)
-  useEventStream(`/api/admin/events?activity=${encodeURIComponent(activityId)}`, {
-    results: () => view.reload(),
-  })
-
-  const run = async (path: string, method: "POST" | "DELETE", question: string) => {
-    if (!confirm(question)) return
-    try {
-      view.setData(await api<AdminView>(`/api/admin/secret-santa/${activityId}${path}`, { method }))
-      setError(null)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
-    }
-  }
-
-  if (!view.data) return null
-  const { participants, drawnAt, withoutEmail, emailsSent, removed } = view.data
-  const unmatched = participants.filter((p) => p.hasMatch === false)
-  return (
-    <Card className="space-y-4">
-      <h2 className="font-medium">Secret Santa</h2>
-      <div className="space-y-2">
-        <Button
-          variant="primary"
-          disabled={drawnAt !== null}
-          onClick={() =>
-            void run(
-              "/draw",
-              "POST",
-              `Draw gifts for ${participants.length} people? Sign-ups close for good and everyone sees who they give a gift to.`,
-            )
-          }
-        >
-          {drawnAt ? "Gifts drawn" : "Draw gifts now"}
-        </Button>
-        {drawnAt !== null && (
-          <Button
-            variant="danger"
-            className="ml-2"
-            onClick={() =>
-              void run(
-                "/undo-draw",
-                "POST",
-                "Undo the gift draw? Everyone keeps their letter, sign-ups reopen until the closing date, and a new draw will run at the draw date (emails already sent cannot be taken back; everyone is emailed again after the new draw).",
-              )
-            }
-          >
-            Undo draw
-          </Button>
-        )}
-        {drawnAt !== null && (
-          <p className="rounded-lg bg-amber-50 p-2 text-xs text-amber-900">
-            Gifts were drawn on {new Date(drawnAt).toLocaleString()}. Sign-ups stay closed and the dates in
-            the form have no effect until you undo the draw.
-          </p>
-        )}
-        <p className="text-xs text-slate-500">
-          Nobody, admins included, can see who gives a gift to whom. If someone withdraws after the draw, only
-          the person giving them a gift gets a new match.
-        </p>
-        <p className="text-xs text-slate-500">
-          {drawnAt
-            ? `Draw emails sent: ${emailsSent} of ${participants.length}.`
-            : config.drawAt
-              ? `Automatic draw on ${new Date(config.drawAt).toLocaleString()}.`
-              : "No automatic draw: use the button."}
-          {withoutEmail > 0 && ` ${withoutEmail} without an email address: they will not get the email.`}
-        </p>
-      </div>
-      {removed.length > 0 && (
-        <p className="rounded-lg bg-rose-50 p-3 text-sm text-rose-700">
-          Rimossi per mancata conferma: {removed.map((p) => p.name).join(", ")}.
-        </p>
-      )}
-      {unmatched.length > 0 && (
-        <p className="rounded-lg bg-rose-50 p-3 text-sm text-rose-700">
-          Left without a match after withdrawals: {unmatched.map((p) => p.name).join(", ")}.
-        </p>
-      )}
-      {error && <p className="text-sm text-rose-600">{error}</p>}
-      <ul className="max-h-80 divide-y divide-slate-100 overflow-auto text-sm">
-        {participants.map((p) => (
-          <li key={p.userId} className="flex items-center gap-2 py-1.5">
-            <span className="mr-auto break-words">
-              {p.name}
-              {drawnAt !== null && (
-                <span className="ml-2 text-xs text-slate-500">
-                  {p.giftConfirmedAt !== null
-                    ? "Regalo confermato"
-                    : p.hasMatch
-                      ? "Da confermare"
-                      : "Senza destinatario"}
-                </span>
-              )}
-              {config.gadget.enabled && p.gadget && (
-                <span className="ml-1 text-xs text-slate-400" title="Iscritto al gadget">
-                  · gadget
-                </span>
-              )}
-            </span>
-            <Button
-              variant="ghost"
-              onClick={() =>
-                void run(
-                  `/participants/${encodeURIComponent(p.userId)}`,
-                  "DELETE",
-                  `Remove ${p.name} from the Secret Santa?`,
-                )
-              }
-            >
-              Remove
-            </Button>
-          </li>
-        ))}
-        {participants.length === 0 && <li className="py-1.5 text-slate-500">Nobody yet.</li>}
-      </ul>
-    </Card>
-  )
-}
-
 /** Shown only if an admin puts it on stage anyway: everything happens on the home page. */
 function Audience() {
   return (
@@ -284,7 +148,13 @@ function Audience() {
   )
 }
 
-export const secretSantaUI = defineActivityUI({ definition: secretSanta, Editor, Audience, Results, Admin })
+export const secretSantaUI = defineActivityUI({
+  definition: secretSanta,
+  Editor,
+  Audience,
+  Results,
+  Admin: SecretSantaAdmin,
+})
 
 // ---- home page ---------------------------------------------------------------------------
 

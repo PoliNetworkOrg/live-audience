@@ -1,4 +1,4 @@
-import { randomBytes, randomInt, randomUUID } from "node:crypto"
+import { createHash, randomBytes, randomInt, randomUUID } from "node:crypto"
 import { EventEmitter } from "node:events"
 import {
   isCorrect,
@@ -76,7 +76,7 @@ interface SecretSantaReassignNotice {
   giverId: string
   withdrawnName: string
   at: number
-  reason?: "withdrawn" | "unconfirmed"
+  reason?: "withdrawn" | "unconfirmed" | "admin"
 }
 
 /** "Your person withdrew" email: who to, who left, and whether there is a new match to open. */
@@ -88,7 +88,7 @@ export interface SecretSantaReassignMail {
   withdrawnName: string
   hasNewMatch: boolean
   at: number
-  reason?: "withdrawn" | "unconfirmed"
+  reason?: "withdrawn" | "unconfirmed" | "admin"
 }
 
 interface SantaWarning {
@@ -111,6 +111,18 @@ export interface SecretSantaStatusMail {
   kind: "confirmation-reminder" | "removed"
   deadline: string
   closesAt: number
+}
+
+export interface SantaAdminActor {
+  id: string
+  name: string
+}
+interface SantaAdminChange {
+  userId: string
+  name: string
+  field: string
+  before: string | null
+  after: string | null
 }
 
 export interface StoreEvents {
@@ -579,14 +591,27 @@ export class Store {
   }
 
   /** Admin: takes someone out, exactly as if they had withdrawn. */
-  removeSecretSantaParticipant(idOrSlug: string, userId: string) {
+  removeSecretSantaParticipant(
+    idOrSlug: string,
+    userId: string,
+    actor?: SantaAdminActor,
+    input?: { reason: string; revision?: string },
+  ) {
     const { activity } = this.requireSecretSanta(idOrSlug)
-    this.removeSecretSantaEntry(activity.id, userId)
+    if (input?.revision) this.assertSantaAdminRevision(activity.id, input.revision)
+    if (!this.getResponse(activity.id, userId)) throw new StoreError(404, "Non risulti iscritto")
+    this.removeSecretSantaEntries(
+      activity.id,
+      [userId],
+      actor ? "admin" : "withdrawn",
+      Date.now(),
+      actor ? { actor, reason: input?.reason ?? "Rimozione dagli organizzatori" } : undefined,
+    )
     return this.getSecretSantaAdmin(activity.id)
   }
 
   /** One random gift cycle among everyone signed up. Closes sign-ups; idempotent. */
-  drawSecretSanta(idOrSlug: string) {
+  drawSecretSanta(idOrSlug: string, actor?: SantaAdminActor) {
     const { activity } = this.requireSecretSanta(idOrSlug)
     if (!this.getSetting(`santa-draw:${activity.id}`)) {
       const ids = this.listResponses(activity.id).map(({ userId }) => userId)
@@ -595,7 +620,30 @@ export class Store {
         drawnAt: Date.now(),
         assignments: buildCycle(ids, (size) => randomInt(size)),
       }
-      this.setSetting(`santa-draw:${activity.id}`, draw)
+      this.db.exec("BEGIN")
+      try {
+        this.setSetting(`santa-draw:${activity.id}`, draw)
+        if (actor) {
+          const people = this.listResponses(activity.id)
+          this.recordSantaAdminAction(
+            activity.id,
+            actor,
+            "Estrazione regali",
+            "Estrazione manuale dal pannello admin",
+            people.map((p) => ({
+              userId: p.userId,
+              name: p.userName,
+              field: "Destinatario",
+              before: null,
+              after: people.find((r) => r.userId === draw.assignments[p.userId])?.userName ?? null,
+            })),
+          )
+        }
+        this.db.exec("COMMIT")
+      } catch (error) {
+        this.db.exec("ROLLBACK")
+        throw error
+      }
       this.events.emit("results", activity.id)
     }
     return this.getResults(activity.id)
@@ -605,13 +653,36 @@ export class Store {
    * Admin: throws the gift draw away and reopens sign-ups (per the config dates), keeping everyone's
    * letter. Emails already sent stay sent; after the next draw everyone is emailed again.
    */
-  undoSecretSantaDraw(idOrSlug: string) {
+  undoSecretSantaDraw(idOrSlug: string, actor?: SantaAdminActor) {
     const { activity } = this.requireSecretSanta(idOrSlug)
-    this.db.prepare("DELETE FROM settings WHERE key = ?").run(`santa-draw:${activity.id}`)
-    this.db.prepare("DELETE FROM settings WHERE key = ?").run(`santa-mail:${activity.id}`)
-    this.db.prepare("DELETE FROM settings WHERE key = ?").run(`santa-reassign:${activity.id}`)
-    for (const key of ["confirmed", "warnings", "removed"]) {
-      this.db.prepare("DELETE FROM settings WHERE key = ?").run(`santa-${key}:${activity.id}`)
+    const draw = this.getSetting<SecretSantaDraw>(`santa-draw:${activity.id}`)
+    const people = this.listResponses(activity.id)
+    this.db.exec("BEGIN")
+    try {
+      this.db.prepare("DELETE FROM settings WHERE key = ?").run(`santa-draw:${activity.id}`)
+      this.db.prepare("DELETE FROM settings WHERE key = ?").run(`santa-mail:${activity.id}`)
+      this.db.prepare("DELETE FROM settings WHERE key = ?").run(`santa-reassign:${activity.id}`)
+      for (const key of ["confirmed", "warnings", "removed"]) {
+        this.db.prepare("DELETE FROM settings WHERE key = ?").run(`santa-${key}:${activity.id}`)
+      }
+      if (actor && draw)
+        this.recordSantaAdminAction(
+          activity.id,
+          actor,
+          "Annullamento estrazione",
+          "Annullamento richiesto dal pannello admin",
+          people.map((p) => ({
+            userId: p.userId,
+            name: p.userName,
+            field: "Destinatario",
+            before: people.find((r) => r.userId === draw.assignments[p.userId])?.userName ?? null,
+            after: null,
+          })),
+        )
+      this.db.exec("COMMIT")
+    } catch (error) {
+      this.db.exec("ROLLBACK")
+      throw error
     }
     this.events.emit("results", activity.id)
     return this.getSecretSantaAdmin(activity.id)
@@ -623,7 +694,7 @@ export class Store {
     throw new StoreError(409, "L'estrazione del gadget è sospesa: per ora raccogliamo solo le adesioni")
   }
 
-  /** Admin only: who signed up and who won the gadget. Never who gives a gift to whom. */
+  /** Complete operational view, returned only through the admin-authenticated routes. */
   getSecretSantaAdmin(idOrSlug: string) {
     const { activity } = this.requireSecretSanta(idOrSlug)
     const responses = this.listResponses(activity.id) as StoredResponse<SecretSantaEntry>[]
@@ -634,26 +705,202 @@ export class Store {
     const sent = new Set(this.getSetting<string[]>(`santa-mail:${activity.id}`) ?? [])
     const confirmations = this.getSetting<Record<string, number>>(`santa-confirmed:${activity.id}`) ?? {}
     const removed = this.getSetting<Record<string, SantaRemoval>>(`santa-removed:${activity.id}`) ?? {}
+    const participants = responses
+      .map(({ userId, userName, response }) => {
+        const receiverId = draw?.assignments[userId]
+        const giver = draw && responses.find((p) => draw.assignments[p.userId] === userId)
+        return {
+          userId,
+          name: userName,
+          email: emails.get(userId) ?? null,
+          entry: response,
+          gadget: response.gadget,
+          giftConfirmedAt: confirmations[userId] ?? null,
+          hasMatch: draw ? Boolean(receiverId) : null,
+          match: receiverId ? { userId: receiverId, name: nameOf(receiverId) } : null,
+          giver: giver ? { userId: giver.userId, name: giver.userName } : null,
+          drawEmailSent: sent.has(userId),
+        }
+      })
+      .sort((a, b) => a.name.localeCompare(b.name))
+    const revision = createHash("sha256")
+      .update(
+        JSON.stringify({
+          config: activity.config,
+          participants: participants.map(({ drawEmailSent: _, ...p }) => p),
+          draw,
+          removed: Object.fromEntries(
+            Object.entries(removed).map(([id, { sentAt: _, ...person }]) => [id, person]),
+          ),
+        }),
+      )
+      .digest("hex")
+    const history = this.db
+      .prepare(
+        "SELECT * FROM secret_santa_admin_actions WHERE activity_id = ? ORDER BY created_at DESC, rowid DESC LIMIT 50",
+      )
+      .all(activity.id) as {
+      id: string
+      actor_name: string
+      kind: string
+      reason: string
+      changes: string
+      created_at: number
+    }[]
     return {
+      revision,
+      counters: {
+        active: participants.length,
+        confirmed: participants.filter((p) => p.giftConfirmedAt !== null).length,
+        pending: participants.filter((p) => p.hasMatch && p.giftConfirmedAt === null).length,
+        unmatched: participants.filter((p) => p.hasMatch === false).length,
+        removed: Object.keys(removed).length,
+        gadget: participants.filter((p) => p.gadget).length,
+      },
+      history: history.map((row) => ({
+        id: row.id,
+        actor: row.actor_name,
+        kind: row.kind,
+        reason: row.reason,
+        at: row.created_at,
+        changes: JSON.parse(row.changes) as SantaAdminChange[],
+      })),
       drawnAt: draw?.drawnAt ?? null,
       removed: Object.entries(removed).map(([userId, p]) => ({ userId, name: p.name, at: p.at })),
       /** How many signed-up people have no email address, and how many draw emails went out. */
       withoutEmail: responses.filter(({ userId }) => !emails.get(userId)).length,
       emailsSent: responses.filter(({ userId }) => sent.has(userId)).length,
-      participants: responses
-        .map(({ userId, userName, response }) => ({
-          userId,
-          name: userName,
-          gadget: response.gadget,
-          giftConfirmedAt: confirmations[userId] ?? null,
-          /** false: drawn, but a withdrawal left this person nobody to give a gift to. */
-          hasMatch: draw ? Boolean(draw.assignments[userId]) : null,
-        }))
-        .sort((a, b) => a.name.localeCompare(b.name)),
+      participants,
       gadget: gadget
         ? { drawnAt: gadget.drawnAt, winners: gadget.winners.map((id) => ({ userId: id, name: nameOf(id) })) }
         : null,
     }
+  }
+
+  private assertSantaAdminRevision(activityId: string, revision: string) {
+    if (this.getSecretSantaAdmin(activityId).revision !== revision)
+      throw new StoreError(409, "La situazione è cambiata. Ricarica i dati prima di salvare la correzione.")
+  }
+
+  private recordSantaAdminAction(
+    activityId: string,
+    actor: SantaAdminActor,
+    kind: string,
+    reason: string,
+    changes: SantaAdminChange[],
+  ) {
+    this.db
+      .prepare(
+        "INSERT INTO secret_santa_admin_actions (id, activity_id, actor_id, actor_name, kind, reason, changes, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+      )
+      .run(randomUUID(), activityId, actor.id, actor.name, kind, reason, JSON.stringify(changes), Date.now())
+  }
+
+  updateSecretSantaAssignments(
+    idOrSlug: string,
+    actor: SantaAdminActor,
+    input: { revision: string; reason: string; assignments: Record<string, string | null> },
+  ) {
+    const { activity } = this.requireSecretSanta(idOrSlug)
+    this.assertSantaAdminRevision(activity.id, input.revision)
+    const draw = this.getSetting<SecretSantaDraw>(`santa-draw:${activity.id}`)
+    if (!draw) throw new StoreError(409, "Prima esegui l'estrazione dei regali")
+    const people = this.listResponses(activity.id)
+    const ids = people.map((p) => p.userId)
+    const keys = Object.keys(input.assignments)
+    if (keys.length !== ids.length || keys.some((id) => !ids.includes(id)))
+      throw new StoreError(400, "Devi includere esattamente tutti i partecipanti attivi")
+    if (ids.length <= 1) {
+      if (ids.some((id) => input.assignments[id] !== null))
+        throw new StoreError(400, "Non puoi assegnare una persona a sé stessa")
+    } else {
+      const seen = new Set<string>()
+      let current = ids[0] as string
+      while (!seen.has(current)) {
+        if (!ids.includes(current)) throw new StoreError(400, "Il destinatario non partecipa a questo giro")
+        seen.add(current)
+        const next = input.assignments[current]
+        if (!next || next === current)
+          throw new StoreError(400, "Ogni persona deve avere un destinatario diverso da sé")
+        current = next
+      }
+      if (seen.size !== ids.length || current !== ids[0])
+        throw new StoreError(400, "Gli abbinamenti devono formare un unico giro, senza destinatari duplicati")
+    }
+    const changes = people
+      .filter((p) => draw.assignments[p.userId] !== input.assignments[p.userId])
+      .map((p) => ({
+        userId: p.userId,
+        name: p.userName,
+        field: "Destinatario",
+        before: people.find((r) => r.userId === draw.assignments[p.userId])?.userName ?? null,
+        after: people.find((r) => r.userId === input.assignments[p.userId])?.userName ?? null,
+      }))
+    if (!changes.length) return this.getSecretSantaAdmin(activity.id)
+    const notices = this.getSetting<SecretSantaReassignNotice[]>(`santa-reassign:${activity.id}`) ?? []
+    const sent = new Set(this.getSetting<string[]>(`santa-mail:${activity.id}`) ?? [])
+    for (const change of changes) {
+      const old = notices.find((n) => n.giverId === change.userId)
+      const index = notices.findIndex((n) => n.giverId === change.userId)
+      if (index >= 0) notices.splice(index, 1)
+      if (sent.has(change.userId))
+        notices.push({
+          giverId: change.userId,
+          withdrawnName: old?.withdrawnName ?? change.before ?? "",
+          reason: "admin",
+          at: Math.max(Date.now(), (old?.at ?? 0) + 1),
+        })
+    }
+    this.db.exec("BEGIN")
+    try {
+      this.setSetting(`santa-draw:${activity.id}`, { ...draw, assignments: input.assignments })
+      this.setSetting(`santa-reassign:${activity.id}`, notices)
+      this.recordSantaAdminAction(activity.id, actor, "Abbinamenti", input.reason, changes)
+      this.db.exec("COMMIT")
+    } catch (error) {
+      this.db.exec("ROLLBACK")
+      throw error
+    }
+    this.events.emit("results", activity.id)
+    return this.getSecretSantaAdmin(activity.id)
+  }
+
+  updateSecretSantaConfirmation(
+    idOrSlug: string,
+    userId: string,
+    actor: SantaAdminActor,
+    input: { revision: string; reason: string; confirmed: boolean },
+  ) {
+    const { activity } = this.requireSecretSanta(idOrSlug)
+    this.assertSantaAdminRevision(activity.id, input.revision)
+    const person = this.listResponses(activity.id).find((p) => p.userId === userId)
+    const draw = this.getSetting<SecretSantaDraw>(`santa-draw:${activity.id}`)
+    if (!person) throw new StoreError(404, "La persona non partecipa a questo giro")
+    if (!draw?.assignments[userId]) throw new StoreError(409, "Questa persona non ha un regalo da confermare")
+    const confirmations = this.getSetting<Record<string, number>>(`santa-confirmed:${activity.id}`) ?? {}
+    const wasConfirmed = confirmations[userId] !== undefined
+    if (wasConfirmed === input.confirmed) return this.getSecretSantaAdmin(activity.id)
+    if (input.confirmed) confirmations[userId] = Date.now()
+    else delete confirmations[userId]
+    this.db.exec("BEGIN")
+    try {
+      this.setSetting(`santa-confirmed:${activity.id}`, confirmations)
+      this.recordSantaAdminAction(activity.id, actor, "Conferma regalo", input.reason, [
+        {
+          userId,
+          name: person.userName,
+          field: "Conferma regalo",
+          before: wasConfirmed ? "Confermato" : "Da confermare",
+          after: input.confirmed ? "Confermato" : "Da confermare",
+        },
+      ])
+      this.db.exec("COMMIT")
+    } catch (error) {
+      this.db.exec("ROLLBACK")
+      throw error
+    }
+    this.events.emit("results", activity.id)
+    return this.getSecretSantaAdmin(activity.id)
   }
 
   private requireSecretSanta(idOrSlug: string) {
@@ -676,8 +923,9 @@ export class Store {
   private removeSecretSantaEntries(
     activityId: string,
     userIds: string[],
-    reason: "withdrawn" | "unconfirmed",
+    reason: "withdrawn" | "unconfirmed" | "admin",
     now: number,
+    manual?: { actor: SantaAdminActor; reason: string },
   ) {
     const responses = this.listResponses(activityId)
     const removedIds = new Set(userIds)
@@ -702,7 +950,7 @@ export class Store {
         giverId,
         withdrawnName,
         at,
-        ...(noticeReason === "unconfirmed" ? { reason: noticeReason } : {}),
+        ...(noticeReason !== "withdrawn" ? { reason: noticeReason } : {}),
       })
     }
     const removed = this.getSetting<Record<string, SantaRemoval>>(`santa-removed:${activityId}`) ?? {}
@@ -738,6 +986,22 @@ export class Store {
           ...gadget,
           winners: gadget.winners.filter((id) => !removedIds.has(id)),
         })
+      if (manual)
+        this.recordSantaAdminAction(
+          activityId,
+          manual.actor,
+          "Rimozione",
+          manual.reason,
+          responses
+            .filter((p) => removedIds.has(p.userId))
+            .map((p) => ({
+              userId: p.userId,
+              name: p.userName,
+              field: "Partecipazione",
+              before: "Attivo",
+              after: "Rimosso",
+            })),
+        )
       this.db.exec("COMMIT")
     } catch (error) {
       this.db.exec("ROLLBACK")

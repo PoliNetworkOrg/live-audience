@@ -38,6 +38,17 @@ const migrations = [
   `,
   // Where to email a participant, for activities that do (Secret Santa). Never part of results.
   `ALTER TABLE responses ADD COLUMN user_email TEXT;`,
+  `CREATE TABLE secret_santa_admin_actions (
+    id TEXT PRIMARY KEY,
+    activity_id TEXT NOT NULL REFERENCES activities(id) ON DELETE CASCADE,
+    actor_id TEXT NOT NULL,
+    actor_name TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    reason TEXT NOT NULL,
+    changes TEXT NOT NULL,
+    created_at INTEGER NOT NULL
+  );
+  CREATE INDEX secret_santa_admin_actions_activity ON secret_santa_admin_actions(activity_id, created_at);`,
 ]
 
 export type Database = DatabaseSync

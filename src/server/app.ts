@@ -25,6 +25,21 @@ const updateActivityBody = z.object({
   config: z.unknown().optional(),
 })
 const respondBody = z.object({ activityId: z.string(), response: z.unknown() })
+const santaAdminEdit = z.object({
+  revision: z.string().regex(/^[a-f0-9]{64}$/),
+  reason: z.string().trim().min(1).max(500),
+})
+const santaAssignments = santaAdminEdit.extend({
+  assignments: z.record(z.string().min(1).max(200), z.string().min(1).max(200).nullable()),
+})
+const santaConfirmation = santaAdminEdit.extend({ confirmed: z.boolean() })
+const santaRemoval = z.object({
+  reason: z.string().trim().min(1).max(500).default("Rimozione dagli organizzatori"),
+  revision: z
+    .string()
+    .regex(/^[a-f0-9]{64}$/)
+    .optional(),
+})
 
 async function parseBody<T>(c: { req: { json: () => Promise<unknown> } }, schema: z.ZodType<T>): Promise<T> {
   const body = await c.req.json().catch(() => ({}))
@@ -206,17 +221,45 @@ export function createApp({ store, session }: { store: Store; session: Middlewar
       return c.body(null, 204)
     })
     .get("/secret-santa/:id", (c) => c.json(store.getSecretSantaAdmin(c.req.param("id"))))
+    .patch("/secret-santa/:id/assignments", async (c) =>
+      c.json(
+        store.updateSecretSantaAssignments(
+          c.req.param("id"),
+          c.get("user") as SessionUser,
+          await parseBody(c, santaAssignments),
+        ),
+      ),
+    )
+    .patch("/secret-santa/:id/participants/:userId/confirmation", async (c) =>
+      c.json(
+        store.updateSecretSantaConfirmation(
+          c.req.param("id"),
+          c.req.param("userId"),
+          c.get("user") as SessionUser,
+          await parseBody(c, santaConfirmation),
+        ),
+      ),
+    )
     .post("/secret-santa/:id/draw", (c) => {
-      store.drawSecretSanta(c.req.param("id"))
+      store.drawSecretSanta(c.req.param("id"), c.get("user") as SessionUser)
       return c.json(store.getSecretSantaAdmin(c.req.param("id")))
     })
-    .post("/secret-santa/:id/undo-draw", (c) => c.json(store.undoSecretSantaDraw(c.req.param("id"))))
+    .post("/secret-santa/:id/undo-draw", (c) =>
+      c.json(store.undoSecretSantaDraw(c.req.param("id"), c.get("user") as SessionUser)),
+    )
     .post("/secret-santa/:id/gadget-draw", (c) => {
       store.drawSecretSantaGadget(c.req.param("id"))
       return c.json(store.getSecretSantaAdmin(c.req.param("id")))
     })
-    .delete("/secret-santa/:id/participants/:userId", (c) =>
-      c.json(store.removeSecretSantaParticipant(c.req.param("id"), c.req.param("userId"))),
+    .delete("/secret-santa/:id/participants/:userId", async (c) =>
+      c.json(
+        store.removeSecretSantaParticipant(
+          c.req.param("id"),
+          c.req.param("userId"),
+          c.get("user") as SessionUser,
+          await parseBody(c, santaRemoval),
+        ),
+      ),
     )
     .get("/api-key", (c) => c.json({ apiKey: store.getApiKey() }))
     .post("/api-key", (c) => c.json({ apiKey: store.regenerateApiKey() }))

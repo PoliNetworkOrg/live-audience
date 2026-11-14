@@ -96,9 +96,12 @@ export function ActivityEditor({ id }: { id: string }) {
         </Card>
         <div className="space-y-6">
           <ResultsPanel activity={loaded.data} />
-          {ui?.Admin && <ui.Admin activityId={id} config={loaded.data.config} />}
+          {ui?.Admin && draft.type !== "secret-santa" && (
+            <ui.Admin activityId={id} config={loaded.data.config} />
+          )}
         </div>
       </div>
+      {ui?.Admin && draft.type === "secret-santa" && <ui.Admin activityId={id} config={loaded.data.config} />}
     </div>
   )
 }
