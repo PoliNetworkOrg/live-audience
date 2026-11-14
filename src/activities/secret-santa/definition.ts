@@ -9,28 +9,37 @@ import { defineActivity } from "../types.ts"
  */
 
 const text = (max: number) => z.string().trim().max(max)
+/** An ISO 8601 instant ("2026-12-12T23:59:00.000Z"), or "" for none. */
+const instant = z.union([z.literal(""), z.iso.datetime({ offset: true })])
 
-const configSchema = z.object({
-  /** Shown on the home page. While false nobody sees it or can join. */
-  visible: z.boolean(),
-  /** New people can join until the gift draw, unless the admin closes sign-ups earlier. */
-  signupsOpen: z.boolean(),
-  intro: text(600),
-  /** Free text, e.g. "Sign up by 12 December". */
-  deadline: text(120),
-  /** Where and when gifts are handed over in person. */
-  exchange: text(200),
-  budget: text(60),
-  gadget: z.object({
-    enabled: z.boolean(),
-    prize: text(120),
-    winners: z.number().int().min(1).max(20),
-  }),
-})
+const configSchema = z
+  .object({
+    /** Shown on the home page. While false nobody sees it or can join. */
+    visible: z.boolean(),
+    /** Manual switch: the admin can close sign-ups at any moment. */
+    signupsOpen: z.boolean(),
+    /** Sign-ups close on their own at this instant. */
+    signupsCloseAt: instant,
+    /** The gift draw runs on its own at this instant, and everyone gets an email. */
+    drawAt: instant,
+    intro: text(600),
+    /** Where and when gifts are handed over in person. */
+    exchange: text(200),
+    budget: text(60),
+    /** A secret PoliNetwork gadget: nobody knows what it is until it is handed over. */
+    gadget: z.object({
+      enabled: z.boolean(),
+      winners: z.number().int().min(1).max(20),
+    }),
+  })
+  .refine((c) => !c.signupsCloseAt || !c.drawAt || Date.parse(c.drawAt) >= Date.parse(c.signupsCloseAt), {
+    message: "The draw must come after sign-ups close",
+    path: ["drawAt"],
+  })
 export type SecretSantaConfig = z.infer<typeof configSchema>
 
 const entrySchema = z.object({
-  likes: z.string().trim().min(1, "Tell your Santa something you like").max(600),
+  likes: z.string().trim().min(1, "Scrivi almeno una cosa che ti piace").max(600),
   dislikes: text(400),
   gadget: z.boolean(),
 })
@@ -58,11 +67,26 @@ export interface SecretSantaView {
   gadgetDrawn: boolean
   /** New people may still sign up. */
   canJoin: boolean
+  /** False when the IdP gave no email for this person: they would miss the draw email. */
+  hasEmail: boolean
   entry: SecretSantaEntry | null
   /** Who this person gives a gift to, once drawn. */
   match: { name: string; likes: string; dislikes: string } | null
   /** null while not drawn or not taking part in the gadget draw. */
   gadgetWon: boolean | null
+}
+
+/** How the prize is called everywhere: it stays a surprise. */
+export const GADGET_NAME = "un gadget segreto PoliNetwork"
+
+/** Whether new people may still sign up at `now` (ms), before any draw. */
+export function signupsOpenAt(config: SecretSantaConfig, now: number) {
+  return config.signupsOpen && (!config.signupsCloseAt || now < Date.parse(config.signupsCloseAt))
+}
+
+/** Whether the automatic draw is due at `now` (ms). */
+export function drawDueAt(config: SecretSantaConfig, now: number) {
+  return Boolean(config.drawAt) && now >= Date.parse(config.drawAt)
 }
 
 /** One random cycle through everybody, so nobody draws themselves and nobody is left out. */
@@ -112,11 +136,13 @@ export const secretSanta = defineActivity<SecretSantaConfig, SecretSantaEntry, S
   defaultConfig: () => ({
     visible: false,
     signupsOpen: true,
-    intro: "Sign up, tell us a few things you love, and you'll get someone to surprise with a small gift.",
-    deadline: "",
+    signupsCloseAt: "",
+    drawAt: "",
+    intro:
+      "Iscriviti, raccontaci cosa ti piace e riceverai una persona da sorprendere con un piccolo regalo.",
     exchange: "",
     budget: "",
-    gadget: { enabled: true, prize: "A PoliNetwork gadget", winners: 1 },
+    gadget: { enabled: true, winners: 1 },
   }),
   responseSchema: () => entrySchema,
   aggregate: (config, responses: StoredResponse<SecretSantaEntry>[]) => ({

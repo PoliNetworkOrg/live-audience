@@ -36,6 +36,8 @@ const migrations = [
     expires_at INTEGER NOT NULL
   );
   `,
+  // Where to email a participant, for activities that do (Secret Santa). Never part of results.
+  `ALTER TABLE responses ADD COLUMN user_email TEXT;`,
 ]
 
 export type Database = DatabaseSync

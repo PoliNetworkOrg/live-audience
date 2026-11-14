@@ -5,6 +5,7 @@ import { Button, Card, Field, Input, Textarea } from "../../client/ui.tsx"
 import { defineActivityUI } from "../ui-types.ts"
 import { Snowfall, StringLights, TreeIllustration, XMAS } from "./decorations.tsx"
 import {
+  GADGET_NAME,
   type SecretSantaConfig,
   type SecretSantaResults,
   type SecretSantaView,
@@ -35,20 +36,29 @@ function Editor({
           Show on the home page
         </Checkbox>
         <Checkbox checked={config.signupsOpen} onChange={(signupsOpen) => set({ signupsOpen })}>
-          Sign-ups open (they close for good with the gift draw)
+          Sign-ups open (untick to close them early; they also close at the date below and with the draw)
         </Checkbox>
       </div>
       <Field label="Intro">
         <Textarea value={config.intro} maxLength={600} onChange={(e) => set({ intro: e.target.value })} />
       </Field>
-      <div className="grid gap-3 sm:grid-cols-3">
-        <Field label="Sign up by" hint="e.g. 12 December">
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Field label="Sign-ups close" hint="Date and time, your time zone. Empty: only by hand.">
           <Input
-            value={config.deadline}
-            maxLength={120}
-            onChange={(e) => set({ deadline: e.target.value })}
+            type="datetime-local"
+            value={toLocalInput(config.signupsCloseAt)}
+            onChange={(e) => set({ signupsCloseAt: fromLocalInput(e.target.value) })}
           />
         </Field>
+        <Field label="Automatic gift draw" hint="Then everyone signed up gets an email. Empty: by hand.">
+          <Input
+            type="datetime-local"
+            value={toLocalInput(config.drawAt)}
+            onChange={(e) => set({ drawAt: fromLocalInput(e.target.value) })}
+          />
+        </Field>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2">
         <Field label="Gift exchange" hint="When and where, in person">
           <Input
             value={config.exchange}
@@ -62,17 +72,10 @@ function Editor({
       </div>
       <hr className="border-slate-100" />
       <Checkbox checked={config.gadget.enabled} onChange={(enabled) => setGadget({ enabled })}>
-        Gadget draw: people can also enter a secret draw for a prize
+        Gadget draw: people can also enter a draw for {GADGET_NAME} (it stays a surprise)
       </Checkbox>
       {config.gadget.enabled && (
-        <div className="grid gap-3 sm:grid-cols-[1fr_8rem]">
-          <Field label="Prize">
-            <Input
-              value={config.gadget.prize}
-              maxLength={120}
-              onChange={(e) => setGadget({ prize: e.target.value })}
-            />
-          </Field>
+        <div className="grid gap-3 sm:grid-cols-[8rem]">
           <Field label="Winners">
             <Input
               type="number"
@@ -86,6 +89,18 @@ function Editor({
       )}
     </div>
   )
+}
+
+/** `<input type="datetime-local">` speaks local time without a zone; the config stores ISO instants. */
+function toLocalInput(iso: string) {
+  if (!iso) return ""
+  const date = new Date(iso)
+  const pad = (n: number) => String(n).padStart(2, "0")
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`
+}
+
+function fromLocalInput(value: string) {
+  return value ? new Date(value).toISOString() : ""
 }
 
 function Checkbox({
@@ -126,6 +141,8 @@ function Results({ config, results }: { config: SecretSantaConfig; results: Secr
 
 interface AdminView {
   drawnAt: number | null
+  withoutEmail: number
+  emailsSent: number
   participants: { userId: string; name: string; gadget: boolean; hasMatch: boolean | null }[]
   gadget: { drawnAt: number; winners: { userId: string; name: string }[] } | null
 }
@@ -148,7 +165,7 @@ function Admin({ activityId, config }: { activityId: string; config: SecretSanta
   }
 
   if (!view.data) return null
-  const { participants, drawnAt, gadget } = view.data
+  const { participants, drawnAt, gadget, withoutEmail, emailsSent } = view.data
   const unmatched = participants.filter((p) => p.hasMatch === false)
   return (
     <Card className="space-y-4">
@@ -165,8 +182,23 @@ function Admin({ activityId, config }: { activityId: string; config: SecretSanta
             )
           }
         >
-          {drawnAt ? "Gifts drawn ✓" : "🎁 Draw gifts"}
+          {drawnAt ? "Gifts drawn" : "Draw gifts now"}
         </Button>
+        {drawnAt !== null && (
+          <Button
+            variant="danger"
+            className="ml-2"
+            onClick={() =>
+              void run(
+                "/undo-draw",
+                "POST",
+                "Undo the gift draw? Everyone keeps their letter, sign-ups reopen until the closing date, and a new draw will run at the draw date (emails already sent cannot be taken back; everyone is emailed again after the new draw).",
+              )
+            }
+          >
+            Undo draw
+          </Button>
+        )}
         {config.gadget.enabled && (
           <Button
             variant="secondary"
@@ -176,12 +208,26 @@ function Admin({ activityId, config }: { activityId: string; config: SecretSanta
               void run("/gadget-draw", "POST", "Draw the gadget winners now? Entries for it close for good.")
             }
           >
-            {gadget ? "Gadget drawn ✓" : "Draw gadget"}
+            {gadget ? "Gadget drawn" : "Draw gadget"}
           </Button>
+        )}
+        {drawnAt !== null && (
+          <p className="rounded-lg bg-amber-50 p-2 text-xs text-amber-900">
+            Gifts were drawn on {new Date(drawnAt).toLocaleString()}. Sign-ups stay closed and the dates in
+            the form have no effect until you undo the draw.
+          </p>
         )}
         <p className="text-xs text-slate-500">
           Nobody, admins included, can see who gives a gift to whom. If someone withdraws after the draw, only
           the person giving them a gift gets a new match.
+        </p>
+        <p className="text-xs text-slate-500">
+          {drawnAt
+            ? `Draw emails sent: ${emailsSent} of ${participants.length}.`
+            : config.drawAt
+              ? `Automatic draw on ${new Date(config.drawAt).toLocaleString()}.`
+              : "No automatic draw: use the button."}
+          {withoutEmail > 0 && ` ${withoutEmail} without an email address: they will not get the email.`}
         </p>
       </div>
       {gadget && (
@@ -231,9 +277,9 @@ function Admin({ activityId, config }: { activityId: string; config: SecretSanta
 function Audience() {
   return (
     <p className="text-center text-sky-100/80">
-      Secret Santa has its own page:{" "}
+      Il Secret Santa ha una pagina tutta sua:{" "}
       <Link href={SECRET_SANTA_PATH} className="underline">
-        open it here 🎄
+        aprila qui
       </Link>
     </p>
   )
@@ -243,40 +289,56 @@ export const secretSantaUI = defineActivityUI({ definition: secretSanta, Editor,
 
 // ---- home page ---------------------------------------------------------------------------
 
-/** A small festive invitation to the Secret Santa page. Renders `empty` when there is none. */
-export function SecretSantaHome({ empty = null }: { empty?: ReactNode }) {
+/** Every visible Secret Santa for whoever is signed in; `null` while loading. */
+export function useSecretSantas(): SecretSantaView[] | null {
   const list = useApi<SecretSantaView[]>("/api/secret-santa")
-  if (list.loading && !list.data) return null
-  if (!list.data?.length) return empty
+  return list.data ?? (list.loading ? null : [])
+}
+
+/** Small festive invitations to the Secret Santa page, one per visible Secret Santa. */
+export function SecretSantaTeasers({ santas }: { santas: SecretSantaView[] }) {
   return (
     <div className="space-y-4">
-      {list.data.map((santa) => (
+      {santas.map((santa) => (
         <Link
           key={santa.id}
           href={SECRET_SANTA_PATH}
-          className="animate-pop-in group relative block overflow-hidden rounded-3xl px-5 pt-12 pb-5 shadow-xl ring-1 ring-white/10 transition active:scale-[0.98]"
-          style={{ background: `linear-gradient(160deg, ${XMAS.night}, ${XMAS.pine})` }}
+          className="animate-pop-in group relative block overflow-hidden rounded-3xl bg-white px-5 pt-12 pb-5 shadow-xl transition active:scale-[0.98]"
+          style={{ color: XMAS.navy }}
         >
-          <StringLights />
+          <StringLights className="absolute inset-x-0 top-0" />
           <Snowfall fixed={false} />
           <span className="relative flex items-center gap-4">
             <TreeIllustration className="h-20 w-16 shrink-0" />
             <span className="min-w-0 flex-1">
               <span
                 className="block text-xs font-semibold tracking-[0.25em] uppercase"
-                style={{ color: XMAS.gold }}
+                style={{ color: XMAS.blue }}
               >
                 Secret Santa
               </span>
               <span className="block text-xl font-semibold tracking-tight text-balance">{santa.title}</span>
-              <span className="mt-1 block text-sm text-sky-100/80">{teaserStatus(santa)}</span>
+              <span className="mt-1 block text-sm" style={{ color: XMAS.muted }}>
+                {teaserStatus(santa)}
+              </span>
             </span>
             <span
               aria-hidden
-              className="text-2xl transition-transform duration-200 ease-out group-hover:translate-x-1"
-              style={{ color: XMAS.gold }}
+              className="flex size-10 shrink-0 items-center justify-center rounded-full text-white transition-transform duration-200 ease-out group-hover:translate-x-1"
+              style={{ background: XMAS.blue }}
             >
-              →
+              <svg
+                aria-hidden
+                viewBox="0 0 24 24"
+                className="size-5"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M5 12h14M13 6l6 6-6 6" />
+              </svg>
             </span>
           </span>
         </Link>
@@ -286,8 +348,9 @@ export function SecretSantaHome({ empty = null }: { empty?: ReactNode }) {
 }
 
 function teaserStatus(santa: SecretSantaView) {
-  if (!santa.entry) return santa.canJoin ? "Write your letter to join ✉️" : "Sign-ups are closed"
-  if (!santa.drawn) return "You're on the list! Waiting for the draw"
-  if (santa.match) return "The draw is done: unwrap your present 🎁"
-  return "Open for news about your match"
+  if (!santa.entry)
+    return santa.canJoin ? "Scrivi la tua letterina per partecipare" : "Le iscrizioni sono chiuse"
+  if (!santa.drawn) return "Ci sei! In attesa dell'estrazione"
+  if (santa.match) return "Estrazione fatta: apri la tua lettera dorata"
+  return "Apri per le novità sul tuo abbinamento"
 }

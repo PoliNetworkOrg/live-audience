@@ -203,6 +203,7 @@ export function createApp({ store, session }: { store: Store; session: Middlewar
       store.drawSecretSanta(c.req.param("id"))
       return c.json(store.getSecretSantaAdmin(c.req.param("id")))
     })
+    .post("/secret-santa/:id/undo-draw", (c) => c.json(store.undoSecretSantaDraw(c.req.param("id"))))
     .post("/secret-santa/:id/gadget-draw", (c) => {
       store.drawSecretSantaGadget(c.req.param("id"))
       return c.json(store.getSecretSantaAdmin(c.req.param("id")))

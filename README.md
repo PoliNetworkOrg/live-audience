@@ -6,7 +6,7 @@ Live audience interaction (polls, word clouds, a prize wheel, a number lottery a
 - **Admin page** (`/admin`): create and edit activities, put them on stage by hand, preview results, manage the API key. Reserved to an IdP permission.
 - **Presentation API** (`/api/v1`): one global API key lets an HTML presentation open/close activities as slides change and read live results to draw its own charts.
 
-- **Secret Santa** (off stage): an admin makes it visible and anyone signed in, Soci or not, writes a "letter" with a few things they like on the Christmas-themed `/secret-santa` page (the home page shows a small invitation to it). The admin draws one gift cycle from the admin page; each person sees only who they give a gift to (gifts are handed over in person). Withdrawing after the draw only rewires the withdrawn person's Santa. An optional gadget draw picks winners among those who opt in. Pairings and winners never go through the API key.
+- **Secret Santa** (off stage): an admin makes it visible and anyone signed in, Soci or not, writes a "letter" with a few things they like on the Christmas-themed `/secret-santa` page (the home page shows a small invitation to it). Sign-ups close at a set date and time, and the gift draw runs on its own at another (or the admin runs it by hand); everyone signed up then gets an email linking to the page, where a golden letter opens to reveal their match; each person sees only who they give a gift to (gifts are handed over in person). Withdrawing after the draw only rewires the withdrawn person's Santa. An optional gadget draw picks winners among those who opt in. Pairings and winners never go through the API key.
 
 There is exactly one stage, so exactly one presentation at a time: no join codes, no QR codes. Signing in is the ticket.
 
@@ -45,7 +45,7 @@ The app is a regular OIDC client of `auth.polinetwork.org`.
 1. **Register the application** at `<IdP>/applications/new`:
    - application type **web**, redirect URI `https://<host>/auth/callback`, post-logout redirect URI `https://<host>/`
    - credential **client secret** (`client_secret_basic`)
-   - scopes `openid profile polinetwork:identity`
+   - scopes `openid profile email polinetwork:identity` (`email` is used only for the Secret Santa draw email)
    - optionally enable end-session (logout also signs out of the IdP) and skip consent (first-party app)
 
    For local development against a local IdP (`http://localhost:3000`), register a separate **native** app with redirect URI `http://localhost:5173/auth/callback`: the IdP refuses localhost redirects for web apps.

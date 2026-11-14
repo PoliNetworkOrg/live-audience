@@ -20,6 +20,7 @@ import {
 import { getActivityDefinition } from "../activities/registry.ts"
 import {
   buildCycle,
+  drawDueAt,
   pickWinners,
   type SecretSantaConfig,
   type SecretSantaDraw,
@@ -27,6 +28,7 @@ import {
   type SecretSantaGadgetDraw,
   type SecretSantaView,
   secretSanta,
+  signupsOpenAt,
   withdrawFromCycle,
 } from "../activities/secret-santa/definition.ts"
 import type { StoredResponse } from "../activities/types.ts"
@@ -56,6 +58,34 @@ export interface AudienceStage {
   status: StageStatus
   changedAt: number
   activity: { id: string; type: string; config: unknown } | null
+}
+
+/** One draw email to send: who to, and what the template needs. Never the name of their match. */
+export interface SecretSantaMail {
+  activityId: string
+  userId: string
+  to: string
+  name: string
+  exchange: string
+  budget: string
+}
+
+/** Someone withdrew after the draw: whoever was giving them a gift must hear about it. */
+interface SecretSantaReassignNotice {
+  giverId: string
+  withdrawnName: string
+  at: number
+}
+
+/** "Your person withdrew" email: who to, who left, and whether there is a new match to open. */
+export interface SecretSantaReassignMail {
+  activityId: string
+  userId: string
+  to: string
+  name: string
+  withdrawnName: string
+  hasNewMatch: boolean
+  at: number
 }
 
 export interface StoreEvents {
@@ -467,13 +497,22 @@ export class Store {
   }
 
   /** Signs `user` up, or updates what they wrote. New people only until the draw. */
-  joinSecretSanta(idOrSlug: string, user: { id: string; name: string }, entry: unknown): SecretSantaView {
+  joinSecretSanta(
+    idOrSlug: string,
+    user: { id: string; name: string; email?: string },
+    entry: unknown,
+  ): SecretSantaView {
     const { activity, config } = this.requireVisibleSecretSanta(idOrSlug)
     const parsed = secretSanta.responseSchema(config).safeParse(entry)
     if (!parsed.success) throw new StoreError(400, "Invalid entry", parsed.error.issues)
     const existing = this.getResponse(activity.id, user.id) as SecretSantaEntry | null
-    if (!existing && (!config.signupsOpen || this.getSetting(`santa-draw:${activity.id}`))) {
-      throw new StoreError(409, "Sign-ups are closed")
+    const drawn = Boolean(this.getSetting(`santa-draw:${activity.id}`))
+    // After the draw a Santa may already be shopping from the letter: it stays as it was.
+    if (existing && drawn) {
+      throw new StoreError(409, "Dopo l'estrazione la letterina non si può più modificare")
+    }
+    if (!existing && (!signupsOpenAt(config, Date.now()) || drawn)) {
+      throw new StoreError(409, "Le iscrizioni sono chiuse")
     }
     // Once the gadget is drawn, joining or leaving it would change who could have won.
     const data =
@@ -482,11 +521,13 @@ export class Store {
         : parsed.data
     this.db
       .prepare(
-        `INSERT INTO responses (activity_id, user_id, user_name, response, updated_at) VALUES (?, ?, ?, ?, ?)
+        `INSERT INTO responses (activity_id, user_id, user_name, response, updated_at, user_email)
+         VALUES (?, ?, ?, ?, ?, ?)
          ON CONFLICT (activity_id, user_id) DO UPDATE SET
-           user_name = excluded.user_name, response = excluded.response, updated_at = excluded.updated_at`,
+           user_name = excluded.user_name, response = excluded.response, updated_at = excluded.updated_at,
+           user_email = coalesce(excluded.user_email, responses.user_email)`,
       )
-      .run(activity.id, user.id, user.name, JSON.stringify(data), Date.now())
+      .run(activity.id, user.id, user.name, JSON.stringify(data), Date.now(), user.email ?? null)
     this.events.emit("results", activity.id)
     return this.secretSantaView(activity, config, user.id)
   }
@@ -521,6 +562,19 @@ export class Store {
     return this.getResults(activity.id)
   }
 
+  /**
+   * Admin: throws the gift draw away and reopens sign-ups (per the config dates), keeping everyone's
+   * letter. Emails already sent stay sent; after the next draw everyone is emailed again.
+   */
+  undoSecretSantaDraw(idOrSlug: string) {
+    const { activity } = this.requireSecretSanta(idOrSlug)
+    this.db.prepare("DELETE FROM settings WHERE key = ?").run(`santa-draw:${activity.id}`)
+    this.db.prepare("DELETE FROM settings WHERE key = ?").run(`santa-mail:${activity.id}`)
+    this.db.prepare("DELETE FROM settings WHERE key = ?").run(`santa-reassign:${activity.id}`)
+    this.events.emit("results", activity.id)
+    return this.getSecretSantaAdmin(activity.id)
+  }
+
   /** Draws the gadget winners among the people who entered it. Idempotent. */
   drawSecretSantaGadget(idOrSlug: string) {
     const { activity, config } = this.requireSecretSanta(idOrSlug)
@@ -547,8 +601,13 @@ export class Store {
     const draw = this.getSetting<SecretSantaDraw>(`santa-draw:${activity.id}`)
     const gadget = this.getSetting<SecretSantaGadgetDraw>(`santa-gadget:${activity.id}`)
     const nameOf = (userId: string) => responses.find((r) => r.userId === userId)?.userName ?? "(withdrawn)"
+    const emails = this.secretSantaEmails(activity.id)
+    const sent = new Set(this.getSetting<string[]>(`santa-mail:${activity.id}`) ?? [])
     return {
       drawnAt: draw?.drawnAt ?? null,
+      /** How many signed-up people have no email address, and how many draw emails went out. */
+      withoutEmail: responses.filter(({ userId }) => !emails.get(userId)).length,
+      emailsSent: responses.filter(({ userId }) => sent.has(userId)).length,
       participants: responses
         .map(({ userId, userName, response }) => ({
           userId,
@@ -577,9 +636,19 @@ export class Store {
   }
 
   private removeSecretSantaEntry(activityId: string, userId: string) {
-    if (!this.getResponse(activityId, userId)) throw new StoreError(404, "Not signed up")
+    const leaving = this.listResponses(activityId).find((r) => r.userId === userId)
+    if (!leaving) throw new StoreError(404, "Non risulti iscritto")
     const draw = this.getSetting<SecretSantaDraw>(`santa-draw:${activityId}`)
     const gadget = this.getSetting<SecretSantaGadgetDraw>(`santa-gadget:${activityId}`)
+    // Whoever was giving the leaving person a gift gets a new match, and an email about it, but only
+    // if they already had the draw email: otherwise that first email already carries the new match.
+    const giver = draw && Object.keys(draw.assignments).find((id) => draw.assignments[id] === userId)
+    const alreadyEmailed = (this.getSetting<string[]>(`santa-mail:${activityId}`) ?? []).includes(giver ?? "")
+    const notices = (
+      this.getSetting<SecretSantaReassignNotice[]>(`santa-reassign:${activityId}`) ?? []
+    ).filter((notice) => notice.giverId !== userId)
+    if (giver && alreadyEmailed)
+      notices.push({ giverId: giver, withdrawnName: leaving.userName, at: Date.now() })
     this.db.exec("BEGIN")
     try {
       this.db.prepare("DELETE FROM responses WHERE activity_id = ? AND user_id = ?").run(activityId, userId)
@@ -588,6 +657,7 @@ export class Store {
           ...draw,
           assignments: withdrawFromCycle(draw.assignments, userId),
         })
+        this.setSetting(`santa-reassign:${activityId}`, notices)
       }
       if (gadget) {
         this.setSetting(`santa-gadget:${activityId}`, {
@@ -617,7 +687,8 @@ export class Store {
       participants: responses.length,
       drawn: Boolean(draw),
       gadgetDrawn: Boolean(gadget),
-      canJoin: config.signupsOpen && !draw,
+      canJoin: signupsOpenAt(config, Date.now()) && !draw,
+      hasEmail: Boolean(this.secretSantaEmails(activity.id).get(userId)),
       entry: mine?.response ?? null,
       match: receiver
         ? { name: receiver.userName, likes: receiver.response.likes, dislikes: receiver.response.dislikes }
@@ -629,7 +700,98 @@ export class Store {
     }
   }
 
+  private secretSantaEmails(activityId: string): Map<string, string> {
+    const rows = this.db
+      .prepare("SELECT user_id, user_email FROM responses WHERE activity_id = ? AND user_email IS NOT NULL")
+      .all(activityId) as { user_id: string; user_email: string }[]
+    return new Map(rows.map((row) => [row.user_id, row.user_email]))
+  }
+
+  /** Runs the gift draws whose time has come. Returns the ids of the activities it drew. */
+  runSecretSantaSchedule(now = Date.now()): string[] {
+    const drawn: string[] = []
+    for (const activity of this.listActivities()) {
+      if (activity.type !== secretSanta.type || this.getSetting(`santa-draw:${activity.id}`)) continue
+      const config = secretSanta.configSchema.safeParse(activity.config)
+      if (!config.success || !drawDueAt(config.data, now)) continue
+      if (this.listResponses(activity.id).length < 2) continue
+      this.drawSecretSanta(activity.id)
+      drawn.push(activity.id)
+    }
+    return drawn
+  }
+
+  /** Draw emails still to send: one per participant with an address and a match, once each. */
+  pendingSecretSantaMails(): SecretSantaMail[] {
+    const mails: SecretSantaMail[] = []
+    for (const activity of this.listActivities()) {
+      if (activity.type !== secretSanta.type) continue
+      const draw = this.getSetting<SecretSantaDraw>(`santa-draw:${activity.id}`)
+      if (!draw) continue
+      const config = secretSanta.configSchema.parse(activity.config)
+      const sent = new Set(this.getSetting<string[]>(`santa-mail:${activity.id}`) ?? [])
+      const emails = this.secretSantaEmails(activity.id)
+      for (const { userId, userName } of this.listResponses(activity.id)) {
+        const email = emails.get(userId)
+        if (!email || sent.has(userId) || !draw.assignments[userId]) continue
+        mails.push({
+          activityId: activity.id,
+          userId,
+          to: email,
+          name: userName.split(" ")[0] || userName,
+          exchange: config.exchange,
+          budget: config.budget,
+        })
+      }
+    }
+    return mails
+  }
+
+  /** "Your person withdrew, you have a new one" emails still to send. */
+  pendingSecretSantaReassignMails(): SecretSantaReassignMail[] {
+    const mails: SecretSantaReassignMail[] = []
+    for (const activity of this.listActivities()) {
+      if (activity.type !== secretSanta.type) continue
+      const draw = this.getSetting<SecretSantaDraw>(`santa-draw:${activity.id}`)
+      const notices = this.getSetting<SecretSantaReassignNotice[]>(`santa-reassign:${activity.id}`) ?? []
+      if (!draw || !notices.length) continue
+      const emails = this.secretSantaEmails(activity.id)
+      const responses = this.listResponses(activity.id)
+      for (const notice of notices) {
+        const giver = responses.find((r) => r.userId === notice.giverId)
+        const to = emails.get(notice.giverId)
+        if (!giver || !to) continue
+        mails.push({
+          activityId: activity.id,
+          userId: notice.giverId,
+          to,
+          name: giver.userName.split(" ")[0] || giver.userName,
+          withdrawnName: notice.withdrawnName,
+          hasNewMatch: Boolean(draw.assignments[notice.giverId]),
+          at: notice.at,
+        })
+      }
+    }
+    return mails
+  }
+
+  markSecretSantaReassignSent(activityId: string, giverId: string, at: number) {
+    const notices = this.getSetting<SecretSantaReassignNotice[]>(`santa-reassign:${activityId}`) ?? []
+    this.setSetting(
+      `santa-reassign:${activityId}`,
+      notices.filter((notice) => !(notice.giverId === giverId && notice.at === at)),
+    )
+  }
+
+  markSecretSantaMailSent(activityId: string, userId: string) {
+    const sent = this.getSetting<string[]>(`santa-mail:${activityId}`) ?? []
+    if (!sent.includes(userId)) this.setSetting(`santa-mail:${activityId}`, [...sent, userId])
+    this.events.emit("results", activityId)
+  }
+
   private deleteSecretSantaDraws(activityId: string) {
+    this.db.prepare("DELETE FROM settings WHERE key = ?").run(`santa-reassign:${activityId}`)
+    this.db.prepare("DELETE FROM settings WHERE key = ?").run(`santa-mail:${activityId}`)
     this.db.prepare("DELETE FROM settings WHERE key = ?").run(`santa-draw:${activityId}`)
     this.db.prepare("DELETE FROM settings WHERE key = ?").run(`santa-gadget:${activityId}`)
   }

@@ -5,12 +5,14 @@ import { createApp } from "./app.ts"
 import { createAuth } from "./auth.ts"
 import { openDatabase } from "./db.ts"
 import { loadEnv } from "./env.ts"
+import { logMailer, startSecretSantaJobs } from "./jobs.ts"
 import { Store } from "./store.ts"
 
 const env = loadEnv()
 const db = openDatabase(env.DATABASE_PATH)
 const store = new Store(db)
 const auth = createAuth(env, db)
+startSecretSantaJobs({ store, mailer: logMailer, publicUrl: env.PUBLIC_URL })
 
 const server = new Hono()
 server.route("/auth", auth.routes)

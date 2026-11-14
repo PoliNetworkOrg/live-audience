@@ -1,30 +1,60 @@
-import { type CSSProperties, type ReactNode, useEffect, useRef, useState } from "react"
+import { type CSSProperties, type ReactNode, useEffect, useEffectEvent, useRef, useState } from "react"
 import { Link } from "wouter"
 import { api, loginUrl, logout, type Me, useApi, useMe } from "../../client/api.ts"
 import {
   Burst,
+  Elf,
+  FlyingSleigh,
   GiftBox,
-  Moon,
+  Icon,
+  type IconName,
   Snowfall,
+  SnowPuff,
   SnowyHills,
+  Sparkle,
+  Sparks,
   Stamp,
-  StarrySky,
   StringLights,
   TreeIllustration,
   XMAS,
 } from "./decorations.tsx"
 import {
+  GADGET_NAME,
   type SecretSantaConfig,
   type SecretSantaEntry,
   type SecretSantaView,
   secretSanta,
 } from "./definition.ts"
 
-/** The Secret Santa page (`/secret-santa`): what participants see, dressed up for Christmas. */
+/**
+ * The Secret Santa page (`/secret-santa`): what participants see, dressed up for Christmas. In Italian,
+ * like the draw email that links here. PoliNetwork blue and ice white as the base; gold, red and green
+ * only as accents (lights, the golden letter, the wax seal).
+ */
 
 export const SECRET_SANTA_PATH = "/secret-santa"
-const PAPER = "oklch(97.5% 0.02 90)"
-const INK = "oklch(28% 0.03 250)"
+const PAPER = XMAS.white
+const INK = XMAS.navy
+
+/** The current time, refreshed every `intervalMs`. */
+function useNow(intervalMs = 1000) {
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), intervalMs)
+    return () => clearInterval(timer)
+  }, [intervalMs])
+  return now
+}
+
+function formatWhen(iso: string) {
+  return new Date(iso).toLocaleString("it-IT", {
+    weekday: "short",
+    day: "numeric",
+    month: "long",
+    hour: "2-digit",
+    minute: "2-digit",
+  })
+}
 
 function prefersReducedMotion() {
   return typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches
@@ -48,28 +78,33 @@ export function SecretSantaPage() {
 
   return (
     <div
-      className="relative min-h-dvh overflow-x-hidden text-white"
+      lang="it"
+      className="relative min-h-dvh overflow-x-hidden"
       style={{
-        background: `linear-gradient(to bottom, ${XMAS.night} 0%, oklch(22% 0.06 250) 45%, oklch(28% 0.06 225) 100%)`,
+        color: INK,
+        background: `radial-gradient(70rem 32rem at 50% -8rem, oklch(62% 0.17 255 / 0.16), transparent 70%), linear-gradient(to bottom, ${XMAS.ice} 0%, oklch(95% 0.025 240) 55%, oklch(92% 0.035 240) 100%)`,
       }}
     >
-      <StarrySky />
-      <Snowfall />
+      <FlyingSleigh />
       <SnowyHills />
+      <Snowfall />
       <header className="relative z-10 pt-[env(safe-area-inset-top)]">
         <StringLights />
-        <Moon className="pointer-events-none absolute top-24 right-[6%] size-12 sm:size-20" />
-        <div className="mx-auto flex max-w-2xl items-center justify-between gap-3 px-5 pt-14">
-          <Link href="/" className="flex items-center gap-2 text-sm text-sky-100/80 hover:text-white">
+        <div className="mx-auto flex max-w-2xl items-center justify-between gap-3 px-5 pt-5">
+          <Link
+            href="/"
+            className="flex items-center gap-2 text-sm font-medium"
+            style={{ color: XMAS.brand800 }}
+          >
             <img src="/logo.png" alt="" className="size-7 rounded-full" />
             <span>
-              PoliNetwork <span className="text-sky-300">Live</span>
+              PoliNetwork <span style={{ color: XMAS.blue }}>Live</span>
             </span>
           </Link>
           {user && <UserChip user={user} />}
         </div>
       </header>
-      <main className="relative z-10 mx-auto w-full max-w-lg px-5 pt-8 pb-[max(14rem,28vh)]">{content}</main>
+      <main className="relative z-10 mx-auto w-full max-w-lg px-5 pt-8 pb-[46vh]">{content}</main>
     </div>
   )
 }
@@ -79,15 +114,16 @@ function UserChip({ user }: { user: Me }) {
     <button
       type="button"
       onClick={() => void logout()}
-      title="Sign out"
-      className="flex items-center gap-2 rounded-full bg-white/10 py-1 pr-3 pl-1 text-sm backdrop-blur-sm hover:bg-white/15"
+      title="Esci"
+      className="flex items-center gap-2 rounded-full border bg-white/80 py-1 pr-3 pl-1 text-sm shadow-sm backdrop-blur-sm transition hover:bg-white"
+      style={{ borderColor: XMAS.frost }}
     >
       {user.picture ? (
         <img src={user.picture} alt="" className="size-6 rounded-full" />
       ) : (
         <span
-          className="flex size-6 items-center justify-center rounded-full text-xs font-bold"
-          style={{ background: XMAS.gold, color: XMAS.night }}
+          className="flex size-6 items-center justify-center rounded-full text-xs font-bold text-white"
+          style={{ background: XMAS.blue }}
         >
           {user.name.slice(0, 1)}
         </span>
@@ -100,20 +136,20 @@ function UserChip({ user }: { user: Me }) {
 function SignedOut() {
   return (
     <div className="xmas-rise space-y-6 text-center">
-      <TreeIllustration className="mx-auto h-36 w-28" />
+      <SantaLogo className="mx-auto h-44 w-auto sm:h-52" />
       <Eyebrow>Secret Santa</Eyebrow>
       <h1 className="text-4xl font-semibold tracking-tight text-balance sm:text-5xl">
-        Someone at PoliNetwork has a present for you
+        Qualcuno in PoliNetwork ha un regalo per te
       </h1>
-      <p className="text-pretty text-sky-100/80">
-        Sign in with your PoliNetwork account to write your letter and find out who you're surprising.
+      <p className="text-pretty" style={{ color: XMAS.muted }}>
+        Accedi con il tuo account PoliNetwork per scrivere la tua letterina e scoprire chi devi sorprendere.
       </p>
       <a
         href={loginUrl(SECRET_SANTA_PATH)}
-        className="inline-flex w-full items-center justify-center rounded-full px-6 py-4 text-lg font-semibold shadow-lg transition active:scale-[0.97]"
-        style={{ background: XMAS.red }}
+        className="inline-flex w-full items-center justify-center rounded-full px-6 py-4 text-lg font-semibold text-white shadow-lg transition active:scale-[0.97]"
+        style={{ background: XMAS.blue }}
       >
-        Sign in with PoliNetwork
+        Accedi con PoliNetwork
       </a>
     </div>
   )
@@ -122,17 +158,17 @@ function SignedOut() {
 function SecretSantas() {
   const list = useApi<SecretSantaView[]>("/api/secret-santa")
   if (list.loading && !list.data) return <Spinner />
-  if (list.error) return <p className="text-center text-rose-200">{list.error.message}</p>
+  if (list.error) return <p className="text-center text-rose-700">{list.error.message}</p>
   if (!list.data?.length) {
     return (
       <div className="xmas-rise space-y-5 text-center">
         <TreeIllustration className="mx-auto h-32 w-24" />
-        <h1 className="text-3xl font-semibold tracking-tight">No Secret Santa right now</h1>
-        <p className="text-sky-100/80">
-          The elves are still wrapping things up. Come back closer to Christmas!
+        <h1 className="text-3xl font-semibold tracking-tight">Nessun Secret Santa in corso</h1>
+        <p style={{ color: XMAS.muted }}>
+          Gli elfi stanno ancora preparando tutto. Torna più vicino a Natale!
         </p>
-        <Link href="/" className="inline-block text-sm text-sky-200 underline">
-          Back to PoliNetwork Live
+        <Link href="/" className="inline-block text-sm underline" style={{ color: XMAS.blue }}>
+          Torna a PoliNetwork Live
         </Link>
       </div>
     )
@@ -143,6 +179,7 @@ function SecretSantas() {
         <SantaExperience
           key={santa.id}
           santa={santa}
+          reload={list.reload}
           onChange={(next) => list.setData((list.data ?? []).map((s) => (s.id === next.id ? next : s)))}
         />
       ))}
@@ -152,13 +189,27 @@ function SecretSantas() {
 
 function SantaExperience({
   santa,
+  reload,
   onChange,
 }: {
   santa: SecretSantaView
+  reload: () => void
   onChange: (s: SecretSantaView) => void
 }) {
-  const [editing, setEditing] = useState(false)
+  const now = useNow()
+  // Once the automatic draw is due, look for it every 10 s, so the golden letter shows up by itself.
+  const drawDue = !santa.drawn && Boolean(santa.config.drawAt) && now >= Date.parse(santa.config.drawAt)
+  useEffect(() => {
+    if (!drawDue) return
+    const timer = setInterval(reload, 10_000)
+    return () => clearInterval(timer)
+  }, [drawDue, reload])
+  const canJoin =
+    santa.canJoin && !(santa.config.signupsCloseAt && now >= Date.parse(santa.config.signupsCloseAt))
+  const [wantsEditing, setEditing] = useState(false)
+  const editing = wantsEditing && !santa.drawn
   const [justJoined, setJustJoined] = useState(false)
+  const [delivery, setDelivery] = useState<SecretSantaView | null>(null)
   const [error, setError] = useState<string | null>(null)
   const { config, entry } = santa
 
@@ -169,17 +220,18 @@ function SantaExperience({
         body: next,
       })
       setJustJoined(!entry)
-      onChange(saved)
+      if (!entry && !prefersReducedMotion()) setDelivery(saved)
+      else onChange(saved)
       setEditing(false)
       setError(null)
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Something went wrong")
+      setError(e instanceof Error ? e.message : "Qualcosa è andato storto")
     }
   }
   const withdraw = async () => {
     const warning = santa.drawn
-      ? "Withdraw from Secret Santa? The person you were giving a present to will get a new Santa, and you can't join again."
-      : "Withdraw from Secret Santa? You can write a new letter until the draw."
+      ? "Vuoi ritirarti dal Secret Santa? La persona a cui dovevi fare il regalo avrà un nuovo Santa e non potrai più iscriverti."
+      : "Vuoi ritirarti dal Secret Santa? Puoi scrivere una nuova letterina fino alla chiusura delle iscrizioni."
     if (!confirm(warning)) return
     try {
       onChange(await api<SecretSantaView>(`/api/secret-santa/${santa.id}/entry`, { method: "DELETE" }))
@@ -187,18 +239,29 @@ function SantaExperience({
       setJustJoined(false)
       setError(null)
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Something went wrong")
+      setError(e instanceof Error ? e.message : "Qualcosa è andato storto")
     }
   }
 
   let body: ReactNode
-  if (!entry && !santa.canJoin) {
+  if (delivery) {
+    body = (
+      <SendingLetter
+        onDelivered={() => {
+          onChange(delivery)
+          setDelivery(null)
+        }}
+      />
+    )
+  } else if (!entry && !canJoin) {
     body = (
       <Paper className="text-center">
-        <p className="text-4xl">🔔</p>
-        <p className="mt-2 text-xl font-semibold">Sign-ups are closed</p>
-        <p className="mt-1 text-sm opacity-70">
-          The elves have sealed the mailbox for this year. See you next Christmas!
+        <GiftBox className="mx-auto h-24 w-24" color={XMAS.brand800} />
+        <p className="mt-3 text-xl font-semibold">
+          {santa.drawn ? "L'estrazione è già stata fatta" : "Le iscrizioni sono chiuse"}
+        </p>
+        <p className="mt-1 text-sm" style={{ color: XMAS.muted }}>
+          Gli elfi hanno sigillato la cassetta delle lettere. Ci vediamo il prossimo Natale!
         </p>
       </Paper>
     )
@@ -219,39 +282,55 @@ function SantaExperience({
   } else {
     body = (
       <Paper className="text-center">
-        <p className="text-4xl">🧦</p>
-        <p className="mt-2 font-semibold">After a withdrawal there's nobody left for you to surprise.</p>
-        <p className="mt-1 text-sm opacity-70">The organisers will be in touch.</p>
+        <p className="text-lg font-semibold">Dopo un ritiro non è rimasto nessuno da sorprendere per te.</p>
+        <p className="mt-1 text-sm" style={{ color: XMAS.muted }}>
+          Gli organizzatori ti contatteranno.
+        </p>
       </Paper>
     )
   }
 
   return (
-    <article aria-labelledby={`santa-${santa.id}`} className="space-y-8">
-      <Hero santa={santa} />
+    <article aria-labelledby={`santa-${santa.id}`} className="space-y-10">
+      <Hero santa={santa} now={now} />
       <Steps santa={santa} />
+      {!santa.drawn && <Countdown santa={santa} now={now} canJoin={canJoin} />}
       {body}
+      {entry && !editing && !santa.hasEmail && !santa.drawn && (
+        <Note>
+          Non abbiamo il tuo indirizzo email, quindi non possiamo avvisarti dell'estrazione. Torna qui
+          {santa.config.drawAt ? ` dopo ${formatWhen(santa.config.drawAt)}` : " dopo l'estrazione"}, oppure
+          esci e rientra.
+        </Note>
+      )}
       {entry && !editing && <GadgetTicket santa={santa} />}
       {error && (
-        <p role="alert" className="rounded-2xl bg-rose-500/25 px-4 py-3 text-center text-sm text-rose-50">
+        <p
+          role="alert"
+          className="rounded-2xl bg-rose-50 px-4 py-3 text-center text-sm text-rose-800 ring-1 ring-rose-200"
+        >
           {error}
         </p>
       )}
       {entry && !editing && (
         <div className="flex justify-center gap-6 text-sm">
-          <button
-            type="button"
-            onClick={() => setEditing(true)}
-            className="text-sky-100 underline underline-offset-4"
-          >
-            Edit my letter
-          </button>
+          {!santa.drawn && (
+            <button
+              type="button"
+              onClick={() => setEditing(true)}
+              className="underline underline-offset-4"
+              style={{ color: XMAS.blue }}
+            >
+              Modifica la letterina
+            </button>
+          )}
           <button
             type="button"
             onClick={() => void withdraw()}
-            className="text-sky-100/60 underline underline-offset-4"
+            className="underline underline-offset-4"
+            style={{ color: XMAS.muted }}
           >
-            Withdraw
+            Ritirati
           </button>
         </div>
       )}
@@ -259,11 +338,35 @@ function SantaExperience({
   )
 }
 
-// ---- hero, steps and details --------------------------------------------------------------
+// ---- hero, countdown and steps ---------------------------------------------------------------
+
+/** Centre the blue badge: the supplied PNG has extra space on the right for the hat. */
+function SantaLogo({ className }: { className?: string }) {
+  return (
+    <img
+      src="/secret-santa-logo.png"
+      alt="PoliNetwork"
+      width={1874}
+      height={2000}
+      className={`translate-x-[9.63%] drop-shadow-[0_12px_28px_oklch(52%_0.18_257/0.25)] ${className ?? ""}`}
+    />
+  )
+}
 
 function Eyebrow({ children }: { children: ReactNode }) {
   return (
-    <p className="text-xs font-semibold tracking-[0.25em] uppercase" style={{ color: XMAS.gold }}>
+    <p className="text-xs font-semibold tracking-[0.28em] uppercase" style={{ color: XMAS.blue }}>
+      {children}
+    </p>
+  )
+}
+
+function Note({ children }: { children: ReactNode }) {
+  return (
+    <p
+      className="rounded-2xl border bg-white/70 px-4 py-3 text-center text-sm backdrop-blur-sm"
+      style={{ borderColor: XMAS.frost, color: XMAS.muted }}
+    >
       {children}
     </p>
   )
@@ -274,38 +377,63 @@ function daysToChristmas(now: Date) {
   return Math.round((Date.UTC(now.getFullYear(), 11, 25) - today) / 86_400_000)
 }
 
-function Hero({ santa }: { santa: SecretSantaView }) {
-  const days = daysToChristmas(new Date())
+function Hero({ santa, now }: { santa: SecretSantaView; now: number }) {
+  const days = daysToChristmas(new Date(now))
   const { config } = santa
   const details = [
-    config.deadline && { icon: "✉️", label: "Letters by", value: config.deadline },
-    config.exchange && { icon: "🤝", label: "Gift exchange", value: config.exchange },
-    config.budget && { icon: "💶", label: "Budget", value: config.budget },
-  ].filter(Boolean) as { icon: string; label: string; value: string }[]
+    config.signupsCloseAt && {
+      icon: "mail",
+      label: "Iscrizioni fino a",
+      value: formatWhen(config.signupsCloseAt),
+    },
+    config.drawAt && { icon: "shuffle", label: "Estrazione", value: formatWhen(config.drawAt) },
+    config.exchange && { icon: "gift", label: "Scambio dei regali", value: config.exchange },
+    config.budget && { icon: "coins", label: "Budget", value: config.budget },
+  ].filter(Boolean) as { icon: IconName; label: string; value: string }[]
   return (
     <section className="xmas-rise space-y-5 text-center">
-      <TreeIllustration className="mx-auto h-36 w-28 drop-shadow-[0_0_24px_oklch(86%_0.14_88/0.25)]" />
-      <Eyebrow>Secret Santa</Eyebrow>
+      <SantaLogo className="mx-auto h-44 w-auto sm:h-52" />
+      <Eyebrow>Secret Santa PoliNetwork</Eyebrow>
       <h1 id={`santa-${santa.id}`} className="text-4xl font-semibold tracking-tight text-balance sm:text-5xl">
         {santa.title}
       </h1>
       {days >= 0 && (
-        <p className="inline-flex items-center gap-2 rounded-full bg-white/10 px-4 py-1.5 text-sm backdrop-blur-sm">
-          <span aria-hidden>🎄</span>
-          {days === 0 ? "Merry Christmas!" : days === 1 ? "1 day to Christmas" : `${days} days to Christmas`}
+        <p
+          className="inline-flex items-center gap-2 rounded-full border bg-white/80 px-4 py-1.5 text-sm font-medium shadow-sm backdrop-blur-sm"
+          style={{ borderColor: XMAS.frost, color: XMAS.brand800 }}
+        >
+          <Icon name="star" className="size-4 text-amber-500" />
+          {days === 0
+            ? "Buon Natale!"
+            : days === 1
+              ? "Manca 1 giorno a Natale"
+              : `Mancano ${days} giorni a Natale`}
         </p>
       )}
-      {config.intro && <p className="mx-auto max-w-md text-pretty text-sky-50/85">{config.intro}</p>}
+      {config.intro && (
+        <p className="mx-auto max-w-md text-pretty" style={{ color: XMAS.muted }}>
+          {config.intro}
+        </p>
+      )}
       {details.length > 0 && (
-        <dl className="flex flex-wrap justify-center gap-2 text-sm">
+        <dl
+          className="mx-auto grid max-w-md gap-px overflow-hidden rounded-2xl border text-left text-sm shadow-sm sm:grid-cols-2"
+          style={{ borderColor: XMAS.frost, background: XMAS.frost }}
+        >
           {details.map((item) => (
-            <div
-              key={item.label}
-              className="flex items-center gap-1.5 rounded-full bg-white/[0.08] px-3 py-1.5 backdrop-blur-sm"
-            >
-              <span aria-hidden>{item.icon}</span>
-              <dt className="text-sky-100/70">{item.label}</dt>
-              <dd className="font-medium">{item.value}</dd>
+            <div key={item.label} className="flex items-start gap-3 bg-white/90 px-4 py-3">
+              <span
+                className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full"
+                style={{ background: XMAS.ice, color: XMAS.blue }}
+              >
+                <Icon name={item.icon} />
+              </span>
+              <span className="min-w-0">
+                <dt className="text-xs" style={{ color: XMAS.muted }}>
+                  {item.label}
+                </dt>
+                <dd className="font-medium break-words first-letter:uppercase">{item.value}</dd>
+              </span>
             </div>
           ))}
         </dl>
@@ -314,51 +442,96 @@ function Hero({ santa }: { santa: SecretSantaView }) {
   )
 }
 
+/** Big ice tiles counting down to the next moment: sign-ups closing, then the draw. */
+function Countdown({ santa, now, canJoin }: { santa: SecretSantaView; now: number; canJoin: boolean }) {
+  const { signupsCloseAt, drawAt } = santa.config
+  const target =
+    canJoin && signupsCloseAt
+      ? { label: "Le iscrizioni chiudono tra", at: Date.parse(signupsCloseAt) }
+      : drawAt
+        ? { label: "L'estrazione è tra", at: Date.parse(drawAt) }
+        : null
+  if (!target) return null
+  const left = Math.max(0, target.at - now)
+  if (left === 0) {
+    return (
+      <p className="text-center text-sm font-medium" style={{ color: XMAS.blue }}>
+        Gli elfi stanno pescando i nomi proprio adesso…
+      </p>
+    )
+  }
+  const units = [
+    { label: "giorni", value: Math.floor(left / 86_400_000) },
+    { label: "ore", value: Math.floor(left / 3_600_000) % 24 },
+    { label: "minuti", value: Math.floor(left / 60_000) % 60 },
+    { label: "secondi", value: Math.floor(left / 1000) % 60 },
+  ]
+  return (
+    <section aria-label={target.label} className="text-center">
+      <p className="text-xs font-semibold tracking-[0.2em] uppercase" style={{ color: XMAS.muted }}>
+        {target.label}
+      </p>
+      <div className="mt-3 flex justify-center gap-2">
+        {units.map((unit) => (
+          <div
+            key={unit.label}
+            className="w-[4.6rem] rounded-2xl border bg-white py-2.5 shadow-[0_6px_18px_oklch(52%_0.18_257/0.12)]"
+            style={{ borderColor: XMAS.frost }}
+          >
+            <p className="text-3xl font-semibold tabular-nums" style={{ color: XMAS.navy }}>
+              {String(unit.value).padStart(2, "0")}
+            </p>
+            <p className="text-[11px] tracking-wide uppercase" style={{ color: XMAS.muted }}>
+              {unit.label}
+            </p>
+          </div>
+        ))}
+      </div>
+    </section>
+  )
+}
+
 function Steps({ santa }: { santa: SecretSantaView }) {
   const steps = [
-    { label: "Write your letter", done: Boolean(santa.entry) },
-    { label: "The draw", done: santa.drawn },
-    { label: "Gift exchange", done: false },
+    { label: "Scrivi la letterina", done: Boolean(santa.entry) },
+    { label: "Estrazione", done: santa.drawn },
+    { label: "Scambio dei regali", done: false },
   ]
   const current = steps.findIndex((step) => !step.done)
   return (
-    <ol className="grid grid-cols-3 gap-2 text-center text-xs" aria-label="Progress">
+    <ol className="grid grid-cols-3 gap-2 text-center text-xs" aria-label="Avanzamento">
       {steps.map((step, i) => (
         <li key={step.label} className="relative flex flex-col items-center gap-2">
           {i > 0 && (
             <span
               aria-hidden
-              className="absolute top-4 right-1/2 h-0.5 w-full -translate-x-4"
-              style={{ background: steps[i - 1]?.done ? XMAS.gold : "oklch(100% 0 0 / 0.15)" }}
+              className="absolute top-4 right-[calc(50%+1rem)] h-0.5 w-[calc(100%-1.5rem)]"
+              style={{ background: steps[i - 1]?.done ? XMAS.blue : XMAS.frost }}
             />
           )}
           <span
-            className="relative flex size-8 items-center justify-center rounded-full text-sm font-bold"
+            className="relative z-10 flex size-8 items-center justify-center rounded-full text-sm font-bold"
             style={
               step.done
-                ? { background: XMAS.gold, color: XMAS.night }
+                ? { background: XMAS.blue, color: XMAS.white }
                 : i === current
-                  ? { background: XMAS.red, boxShadow: `0 0 0 4px oklch(60% 0.2 25 / 0.3)` }
-                  : { background: "oklch(100% 0 0 / 0.12)", color: "oklch(100% 0 0 / 0.6)" }
+                  ? {
+                      background: XMAS.white,
+                      color: XMAS.blue,
+                      boxShadow: `0 0 0 2px ${XMAS.blue}, 0 0 0 6px oklch(52% 0.18 257 / 0.15)`,
+                    }
+                  : { background: XMAS.white, color: XMAS.muted, boxShadow: `0 0 0 1px ${XMAS.frost}` }
             }
             aria-current={i === current ? "step" : undefined}
           >
-            {step.done ? (
-              <svg viewBox="0 0 16 16" className="size-4" aria-label="done">
-                <path
-                  d="M3 8.5 6.5 12 13 4.5"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2.4"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-            ) : (
-              i + 1
-            )}
+            {step.done ? <Icon name="check" className="size-4" /> : i + 1}
           </span>
-          <span className={i === current ? "font-semibold" : "text-sky-100/70"}>{step.label}</span>
+          <span
+            className={i === current ? "font-semibold" : ""}
+            style={{ color: i === current ? XMAS.navy : XMAS.muted }}
+          >
+            {step.label}
+          </span>
         </li>
       ))}
     </ol>
@@ -370,8 +543,8 @@ function Steps({ santa }: { santa: SecretSantaView }) {
 function Paper({ children, className = "" }: { children: ReactNode; className?: string }) {
   return (
     <div
-      className={`xmas-rise relative overflow-hidden rounded-3xl p-6 pt-8 shadow-2xl ${className}`}
-      style={{ background: PAPER, color: INK }}
+      className={`xmas-rise relative overflow-hidden rounded-3xl border p-6 pt-8 shadow-[0_20px_50px_oklch(35%_0.06_250/0.15)] ${className}`}
+      style={{ background: PAPER, color: INK, borderColor: XMAS.frost }}
     >
       <AirmailEdge />
       {children}
@@ -379,21 +552,21 @@ function Paper({ children, className = "" }: { children: ReactNode; className?: 
   )
 }
 
+/** Blue and white airmail stripes, with a thread of red. */
 function AirmailEdge() {
   return (
     <span
       aria-hidden
       className="absolute inset-x-0 top-0 h-2"
       style={{
-        background: `repeating-linear-gradient(135deg, ${XMAS.red} 0 12px, ${PAPER} 12px 20px, ${XMAS.pine} 20px 32px, ${PAPER} 32px 40px)`,
+        background: `repeating-linear-gradient(135deg, ${XMAS.blue} 0 12px, ${PAPER} 12px 20px, ${XMAS.red} 20px 32px, ${PAPER} 32px 40px)`,
       }}
     />
   )
 }
 
 const linedPaper: CSSProperties = {
-  backgroundImage:
-    "repeating-linear-gradient(to bottom, transparent 0 31px, oklch(85% 0.03 250 / 0.7) 31px 32px)",
+  backgroundImage: "repeating-linear-gradient(to bottom, transparent 0 31px, oklch(88% 0.04 245) 31px 32px)",
   lineHeight: "32px",
 }
 
@@ -415,7 +588,6 @@ function Letter({
   const [gadget, setGadget] = useState(entry?.gadget ?? config.gadget.enabled)
   const [saving, setSaving] = useState(false)
   const parsed = secretSanta.responseSchema(config).safeParse({ likes, dislikes, gadget })
-  const prize = config.gadget.prize || "a PoliNetwork gadget"
 
   const submit = async () => {
     if (!parsed.success || saving) return
@@ -427,7 +599,7 @@ function Letter({
     }
   }
   const area =
-    "block w-full resize-none bg-transparent px-1 text-[17px] outline-none placeholder:text-slate-400 focus-visible:bg-sky-100/40"
+    "block w-full resize-none bg-transparent px-1 text-[17px] outline-none placeholder:text-slate-400 focus-visible:bg-sky-50"
   return (
     <Paper>
       <Stamp
@@ -443,41 +615,46 @@ function Letter({
         }}
       >
         <div className="pr-16">
-          <p className="text-2xl font-semibold tracking-tight">Dear Secret Santa,</p>
-          <p className="mt-1 text-sm text-slate-500">Not a wish list: just what makes me happy.</p>
+          <p className="text-2xl font-semibold tracking-tight">Caro Secret Santa,</p>
+          <p className="mt-1 text-sm" style={{ color: XMAS.muted }}>
+            Non è una lista dei desideri: solo le cose che mi rendono felice.
+          </p>
         </div>
         <label className="block">
-          <span className="text-sm font-semibold" style={{ color: XMAS.redDark }}>
-            Things I love
+          <span className="text-sm font-semibold" style={{ color: XMAS.blue }}>
+            Le cose che amo
           </span>
           <textarea
             value={likes}
             onChange={(e) => setLikes(e.target.value)}
             maxLength={600}
             rows={4}
-            placeholder="Dark chocolate, board games, anything with cats, Studio Ghibli, hiking…"
+            placeholder="Cioccolato fondente, giochi da tavolo, gatti, Studio Ghibli, montagna…"
             className={area}
             style={linedPaper}
           />
         </label>
         <label className="block">
-          <span className="text-sm font-semibold" style={{ color: XMAS.redDark }}>
-            Better not <span className="font-normal text-slate-500">(optional)</span>
+          <span className="text-sm font-semibold" style={{ color: XMAS.blue }}>
+            Meglio di no{" "}
+            <span className="font-normal" style={{ color: XMAS.muted }}>
+              (facoltativo)
+            </span>
           </span>
           <textarea
             value={dislikes}
             onChange={(e) => setDislikes(e.target.value)}
             maxLength={400}
             rows={2}
-            placeholder="Allergies, things I already have too many of…"
+            placeholder="Allergie, cose che ho già in abbondanza…"
             className={area}
             style={linedPaper}
           />
         </label>
         {config.gadget.enabled && (
           <label
-            className="flex cursor-pointer items-start gap-3 rounded-2xl border-2 border-dashed p-3 text-sm"
-            style={{ borderColor: XMAS.goldDark, background: "oklch(94% 0.05 90)" }}
+            className="flex cursor-pointer items-start gap-3 rounded-2xl border p-3.5 text-sm"
+            style={{ borderColor: XMAS.frost, background: XMAS.ice }}
           >
             <input
               type="checkbox"
@@ -485,29 +662,38 @@ function Letter({
               disabled={gadgetLocked}
               onChange={(e) => setGadget(e.target.checked)}
               className="mt-0.5 size-5 shrink-0"
-              style={{ accentColor: XMAS.redDark }}
+              style={{ accentColor: XMAS.blue }}
             />
             <span>
-              <span aria-hidden>🎟 </span>Also put my name in the secret draw for <b>{prize}</b>
-              {gadgetLocked && (
-                <span className="block text-slate-500">The gadget has already been drawn.</span>
-              )}
+              Partecipo anche all'estrazione di <b>{GADGET_NAME}</b>
+              <span className="block" style={{ color: XMAS.muted }}>
+                {gadgetLocked ? "Il gadget è già stato estratto." : "Cosa sia, lo scopre solo chi vince."}
+              </span>
             </span>
+            <Icon name="ticket" className="ml-auto size-5 shrink-0 text-amber-500" />
           </label>
         )}
-        <p className="text-right text-sm text-slate-500 italic">Only my Secret Santa will read this.</p>
+        <p className="text-right text-sm italic" style={{ color: XMAS.muted }}>
+          La leggerà solo il mio Secret Santa.
+        </p>
         <div className="flex items-center gap-3">
           <button
             type="submit"
             disabled={!parsed.success || saving}
-            className="flex-1 rounded-full px-6 py-4 text-lg font-semibold text-white shadow-lg transition active:scale-[0.97] disabled:opacity-40 disabled:active:scale-100"
-            style={{ background: XMAS.red }}
+            className="flex flex-1 items-center justify-center gap-2 rounded-full px-6 py-4 text-lg font-semibold text-white shadow-lg transition active:scale-[0.97] disabled:shadow-none disabled:active:scale-100"
+            style={{ background: parsed.success ? XMAS.blue : "oklch(80% 0.03 250)" }}
           >
-            {saving ? "Sending…" : entry ? "Save my letter" : "Send to the North Pole ✉️"}
+            <Icon name="mail" className="size-5" />
+            {saving ? "Invio…" : entry ? "Salva la letterina" : "Spedisci al Polo Nord"}
           </button>
           {onCancel && (
-            <button type="button" onClick={onCancel} className="px-3 text-sm text-slate-500 underline">
-              Cancel
+            <button
+              type="button"
+              onClick={onCancel}
+              className="px-3 text-sm underline"
+              style={{ color: XMAS.muted }}
+            >
+              Annulla
             </button>
           )}
         </div>
@@ -518,41 +704,133 @@ function Letter({
 
 // ---- waiting for the draw -----------------------------------------------------------------
 
+const MINI_GIFT_COLORS = [XMAS.blue, XMAS.brand800, XMAS.brand500, XMAS.red, XMAS.pine]
+
+const SEND_MS = 2700
+
+function SendingLetter({ onDelivered }: { onDelivered: () => void }) {
+  const delivered = useEffectEvent(onDelivered)
+  useEffect(() => {
+    const timer = setTimeout(() => delivered(), SEND_MS)
+    const motion = window.matchMedia("(prefers-reduced-motion: reduce)")
+    const onMotionChange = () => {
+      if (motion.matches) delivered()
+    }
+    motion.addEventListener("change", onMotionChange)
+    return () => {
+      clearTimeout(timer)
+      motion.removeEventListener("change", onMotionChange)
+    }
+  }, [])
+
+  return (
+    <div
+      className="overflow-hidden rounded-3xl border bg-white/80 p-6 text-center"
+      style={{ borderColor: XMAS.frost }}
+    >
+      <div aria-hidden className="relative h-64 [perspective:900px]">
+        <div className="xmas-send-flight absolute inset-x-0 bottom-6 mx-auto h-36 w-56">
+          <span
+            className="absolute inset-0 rounded-xl border bg-white shadow-lg"
+            style={{ borderColor: XMAS.frost }}
+          />
+          <span
+            className="xmas-send-paper absolute inset-x-4 -top-12 h-36 rounded-lg border bg-white p-4 text-left shadow-sm"
+            style={{ ...linedPaper, borderColor: XMAS.frost, color: XMAS.blue }}
+          >
+            Caro Secret Santa…
+            <Icon name="heart" className="mt-3 size-6" />
+          </span>
+          <span
+            className="absolute inset-0 z-20 flex items-end justify-center rounded-xl bg-white pb-5 text-sm font-semibold"
+            style={{ clipPath: "polygon(0 0, 50% 50%, 100% 0, 100% 100%, 0 100%)", color: XMAS.blue }}
+          >
+            <AirmailEdge />
+            Per il Polo Nord
+          </span>
+          <span
+            className="xmas-send-flap absolute inset-x-0 top-0 z-30 h-1/2 origin-top"
+            style={{ background: XMAS.frost, clipPath: "polygon(0 0, 100% 0, 50% 100%)" }}
+          />
+          <Elf
+            hat={XMAS.pine}
+            holding="gift"
+            frontArmRest={-60}
+            className="xmas-post-elf absolute -right-7 -bottom-2 z-40 w-14 -scale-x-100"
+          />
+          {[0, 1, 2].map((i) => (
+            <Sparkle
+              key={i}
+              className="xmas-send-star absolute top-1/2 -left-6 size-4"
+              color={i === 1 ? XMAS.sky : XMAS.gold}
+              style={{ animationDelay: `${1400 + i * 120}ms` }}
+            />
+          ))}
+        </div>
+      </div>
+      <p role="status" className="text-xl font-semibold">
+        La tua letterina vola al Polo Nord!
+      </p>
+      <p className="mt-2 text-sm" style={{ color: XMAS.muted }}>
+        Un elfo si occupa della consegna.
+      </p>
+      <button
+        type="button"
+        onClick={onDelivered}
+        className="mt-3 min-h-11 px-4 text-sm underline underline-offset-4"
+        style={{ color: XMAS.blue }}
+      >
+        Salta l'animazione
+      </button>
+    </div>
+  )
+}
+
 function Waiting({ santa, justJoined }: { santa: SecretSantaView; justJoined: boolean }) {
-  const shown = Math.min(santa.participants, 14)
+  const shown = Math.min(santa.participants, 3)
+  const confirmation = useRef<HTMLHeadingElement>(null)
+  useEffect(() => {
+    if (justJoined) confirmation.current?.focus({ preventScroll: true })
+  }, [justJoined])
   return (
     <Paper className="text-center">
       {justJoined && (
         <span
-          className="xmas-stamp absolute top-8 right-4 rounded-lg border-4 px-2 py-0.5 text-sm font-black tracking-widest uppercase"
+          className="xmas-stamp absolute top-8 right-4 rounded-lg border-[3px] px-2 py-0.5 text-sm font-black tracking-widest uppercase"
           style={{ borderColor: XMAS.red, color: XMAS.red }}
         >
-          Sent ✓
+          Spedita
         </span>
       )}
       <GiftBox className="xmas-wobble mx-auto h-36 w-36" />
-      <p className="mt-2 text-2xl font-semibold tracking-tight">You're on the list!</p>
-      <p className="mt-1 text-pretty text-slate-600">
-        Your letter is in the North Pole mailbox. Come back after the draw to find out who you're surprising.
+      <h2
+        ref={confirmation}
+        tabIndex={-1}
+        className="mt-2 text-2xl font-semibold tracking-tight outline-offset-4"
+      >
+        Ci sei!
+      </h2>
+      <p className="mt-1 text-pretty" style={{ color: XMAS.muted }}>
+        La tua letterina è nella cassetta del Polo Nord. Torna dopo l'estrazione per scoprire chi devi
+        sorprendere.
       </p>
-      <div className="mt-5 space-y-2">
-        <div className="flex flex-wrap justify-center gap-1" aria-hidden>
+      <div className="mt-6 space-y-2">
+        <div className="flex flex-wrap justify-center gap-1.5" aria-hidden>
           {Array.from({ length: shown }, (_, i) => (
             <span
               // biome-ignore lint/suspicious/noArrayIndexKey: one icon per participant, no identity
               key={i}
-              className="xmas-pop text-lg"
+              className="xmas-pop"
               style={{ animationDelay: `${i * 60}ms` }}
             >
-              {["🎁", "🎄", "⛄", "🧦", "⭐"][i % 5]}
+              <GiftBox className="size-6" color={MINI_GIFT_COLORS[i % MINI_GIFT_COLORS.length]} />
             </span>
           ))}
-          {santa.participants > shown && (
-            <span className="self-center text-sm text-slate-500">+{santa.participants - shown}</span>
-          )}
         </div>
-        <p className="text-sm text-slate-500">
-          {santa.participants} {santa.participants === 1 ? "elf has" : "elves have"} signed up so far
+        <p className="text-sm" style={{ color: XMAS.muted }}>
+          {santa.participants === 1
+            ? "1 persona iscritta finora"
+            : `${santa.participants} persone iscritte finora`}
         </p>
       </div>
     </Paper>
@@ -561,7 +839,208 @@ function Waiting({ santa, justJoined }: { santa: SecretSantaView; justJoined: bo
 
 // ---- the reveal ---------------------------------------------------------------------------
 
-type RevealStage = "wrapped" | "opening" | "open"
+type RevealStage = "sealed" | "opening" | "open"
+
+const GOLD_FOIL =
+  "linear-gradient(135deg, oklch(93% 0.09 92) 0%, oklch(81% 0.14 82) 35%, oklch(91% 0.11 92) 55%, oklch(73% 0.13 72) 100%)"
+const GOLD_FOIL_DARK =
+  "linear-gradient(160deg, oklch(85% 0.12 86) 0%, oklch(71% 0.13 72) 60%, oklch(65% 0.12 68) 100%)"
+const FOLD_LINES =
+  "linear-gradient(to bottom right, transparent 49.6%, oklch(60% 0.1 70 / 0.35) 50%, transparent 50.4%), linear-gradient(to bottom left, transparent 49.6%, oklch(60% 0.1 70 / 0.35) 50%, transparent 50.4%)"
+
+const SEAL_STYLE: CSSProperties = {
+  background: `radial-gradient(circle at 35% 30%, oklch(64% 0.2 25), ${XMAS.redDark} 70%)`,
+  color: XMAS.gold,
+  boxShadow: "0 0 0 3px oklch(47% 0.17 25 / 0.45), 0 6px 14px oklch(20% 0.05 250 / 0.3)",
+}
+
+/**
+ * A golden envelope sealed with red wax. Opening it, two elves do the work: Tonio cracks the seal
+ * with his candy cane, Gina lifts the flap and pulls the card out, then they vanish in a puff of
+ * stars and the gift tag takes its place. The whole show runs on `--open` (see Reveal).
+ */
+function GoldenLetter({ opening, onOpen }: { opening: boolean; onOpen: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      aria-label={opening ? "Salta l'animazione" : "Apri la tua lettera dorata"}
+      className="group relative mx-auto block w-[19rem] max-w-full outline-offset-8 [perspective:900px]"
+    >
+      <span
+        aria-hidden
+        className="absolute inset-x-4 top-1/4 -z-10 h-3/4 rounded-full blur-3xl transition-opacity duration-700"
+        style={{ background: XMAS.gold, opacity: opening ? 0.8 : 0.45 }}
+      />
+      <span
+        aria-hidden
+        className={`relative block aspect-[3/2] w-full transition-transform duration-300 ease-out group-hover:-translate-y-1 group-active:scale-[0.97] ${opening ? "xmas-letter-beats" : "xmas-float"}`}
+      >
+        <span
+          className="absolute inset-0 rounded-2xl shadow-[0_24px_50px_oklch(55%_0.12_75/0.35)]"
+          style={{ background: GOLD_FOIL_DARK }}
+        />
+        <span
+          className={`absolute inset-x-5 top-3 bottom-3 z-10 flex flex-col items-center rounded-xl pt-5 shadow-md ${opening ? "xmas-letter-card" : ""}`}
+          style={{ background: PAPER, color: INK }}
+        >
+          <span className="text-[10px] tracking-[0.3em] uppercase" style={{ color: XMAS.blue }}>
+            Secret Santa
+          </span>
+          <span className="mt-1 text-lg font-semibold">La tua persona</span>
+        </span>
+        <span
+          className="absolute inset-0 z-20 rounded-2xl"
+          style={{ background: GOLD_FOIL, clipPath: "polygon(0 0, 50% 55%, 100% 0, 100% 100%, 0 100%)" }}
+        />
+        <span
+          className="absolute inset-0 z-20 rounded-2xl"
+          style={{ background: FOLD_LINES, clipPath: "polygon(0 100%, 50% 55%, 100% 100%)" }}
+        />
+        <span
+          className={`absolute inset-x-0 top-0 z-30 h-[58%] origin-top ${opening ? "xmas-letter-flap" : ""}`}
+          style={{
+            background: GOLD_FOIL,
+            clipPath: "polygon(0 0, 100% 0, 50% 100%)",
+            filter: "drop-shadow(0 2px 2px oklch(40% 0.08 70 / 0.35))",
+          }}
+        />
+        {!opening && (
+          <span className="absolute inset-0 z-30 overflow-hidden rounded-2xl">
+            <span className="xmas-shimmer absolute inset-y-0 -left-1/3 w-1/4 bg-white/50 blur-md" />
+          </span>
+        )}
+        {opening ? (
+          <span
+            aria-hidden
+            className="absolute top-[58%] left-1/2 z-40 size-14 -translate-x-1/2 -translate-y-1/2"
+          >
+            <span
+              className="xmas-seal-ring absolute inset-0 rounded-full border-2"
+              style={{ borderColor: XMAS.gold }}
+            />
+            <span
+              className="xmas-seal-half-l absolute inset-0 flex items-center justify-center rounded-full"
+              style={{ ...SEAL_STYLE, clipPath: "inset(-24px 50% -24px -24px)" }}
+            >
+              <Icon name="star" className="size-6" />
+            </span>
+            <span
+              className="xmas-seal-half-r absolute inset-0 flex items-center justify-center rounded-full"
+              style={{ ...SEAL_STYLE, clipPath: "inset(-24px -24px -24px 50%)" }}
+            >
+              <Icon name="star" className="size-6" />
+            </span>
+          </span>
+        ) : (
+          <span
+            className="absolute top-[58%] left-1/2 z-40 flex size-14 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full"
+            style={SEAL_STYLE}
+          >
+            <Icon name="star" className="size-6" />
+          </span>
+        )}
+        {opening && <Sparks />}
+        {opening && <LetterElves />}
+      </span>
+    </button>
+  )
+}
+
+/** Where the trail and card twinkles appear, in % of the envelope. */
+const TRAIL_TWINKLES = [
+  { left: "90%", top: "40%", size: "size-3", color: XMAS.gold, delay: "0ms" },
+  { left: "86%", top: "-12%", size: "size-3", color: XMAS.white, delay: "100ms" },
+  { left: "80%", top: "-38%", size: "size-4", color: XMAS.gold, delay: "200ms" },
+]
+const CARD_TWINKLES = [
+  { left: "10%", top: "-66%", size: "size-4", color: XMAS.gold, delay: "0ms" },
+  { left: "30%", top: "-74%", size: "size-3", color: XMAS.white, delay: "60ms" },
+  { left: "62%", top: "-76%", size: "size-3", color: XMAS.sky, delay: "120ms" },
+  { left: "90%", top: "-62%", size: "size-4", color: XMAS.gold, delay: "180ms" },
+]
+
+/**
+ * The two elves opening the letter. Tonio (red hat) hops onto the envelope and cracks the seal with
+ * his candy cane; Gina (green hat) leaps onto the top edge, lifts the flap and yanks the card out.
+ * Each path wrapper is exactly the envelope's size, so its translate % are % of the envelope.
+ */
+function LetterElves() {
+  return (
+    <>
+      <span aria-hidden className="xmas-elf-a-path pointer-events-none absolute inset-0 z-50">
+        <SnowPuff className="xmas-puff pointer-events-none absolute -bottom-3 -left-4 w-16" />
+        <Elf
+          hat={XMAS.red}
+          holding="cane"
+          frontArmRest={-110}
+          backArmRest={12}
+          frontArmClassName="xmas-elf-a-arm"
+          eyesClassName="xmas-elf-blink"
+          className="xmas-elf-a-body pointer-events-none absolute -bottom-2 -left-3 w-14"
+        />
+        <span
+          className="xmas-poof pointer-events-none absolute size-8 -translate-x-1/2 translate-y-1/2"
+          style={{ left: 16, bottom: 29 }}
+        >
+          <Sparkle className="size-full" color={XMAS.gold} />
+        </span>
+      </span>
+      <span aria-hidden className="xmas-elf-b-path pointer-events-none absolute inset-0 z-50">
+        <SnowPuff
+          className="xmas-puff pointer-events-none absolute -right-4 -bottom-3 w-16"
+          style={{ animationDelay: "120ms" }}
+        />
+        <Elf
+          hat={XMAS.pine}
+          frontArmRest={10}
+          backArmRest={10}
+          frontArmClassName="xmas-elf-b-arm"
+          backArmClassName="xmas-elf-b-arm"
+          eyesClassName="xmas-elf-blink"
+          className="xmas-elf-b-body pointer-events-none absolute -right-3 -bottom-2 w-14 -scale-x-100"
+        />
+        <span
+          className="xmas-poof pointer-events-none absolute size-8 translate-x-1/2 translate-y-1/2"
+          style={{ right: 16, bottom: 29 }}
+        >
+          <Sparkle className="size-full" color={XMAS.gold} />
+        </span>
+      </span>
+      {TRAIL_TWINKLES.map((twinkle) => (
+        <span
+          key={`${twinkle.left}-${twinkle.top}`}
+          aria-hidden
+          className={`xmas-trail-twinkle pointer-events-none absolute z-50 ${twinkle.size} -translate-1/2`}
+          style={{
+            left: twinkle.left,
+            top: twinkle.top,
+            animationDelay: `calc(var(--open) * 0.52 + ${twinkle.delay})`,
+          }}
+        >
+          <Sparkle className="size-full" color={twinkle.color} />
+        </span>
+      ))}
+      {CARD_TWINKLES.map((twinkle) => (
+        <span
+          key={`${twinkle.left}-${twinkle.top}`}
+          aria-hidden
+          className={`xmas-card-twinkle pointer-events-none absolute z-50 ${twinkle.size} -translate-1/2`}
+          style={{
+            left: twinkle.left,
+            top: twinkle.top,
+            animationDelay: `calc(var(--open) * 0.72 + ${twinkle.delay})`,
+          }}
+        >
+          <Sparkle className="size-full" color={twinkle.color} />
+        </span>
+      ))}
+    </>
+  )
+}
+
+/** How long the opening show lasts. Keep in sync: every opening keyframe in styles.css runs on var(--open). */
+const OPEN_MS = 3000
 
 function Reveal({
   activityId,
@@ -575,110 +1054,171 @@ function Reveal({
   const storageKey = `secret-santa-opened:${activityId}:${match.name}`
   const [stage, setStage] = useState<RevealStage>(() => {
     try {
-      return localStorage.getItem(storageKey) === "1" ? "open" : "wrapped"
+      return localStorage.getItem(storageKey) === "1" ? "open" : "sealed"
     } catch {
-      return "wrapped"
+      return "sealed"
     }
   })
   const [celebrate, setCelebrate] = useState(false)
+  const revealedName = useRef<HTMLHeadingElement>(null)
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined)
   useEffect(() => () => clearTimeout(timer.current), [])
+  useEffect(() => {
+    if (stage === "open" && celebrate) revealedName.current?.focus({ preventScroll: true })
+    if (stage !== "opening") return
+    const motion = window.matchMedia("(prefers-reduced-motion: reduce)")
+    const onMotionChange = () => {
+      if (motion.matches) {
+        clearTimeout(timer.current)
+        setCelebrate(false)
+        setStage("open")
+      }
+    }
+    motion.addEventListener("change", onMotionChange)
+    return () => motion.removeEventListener("change", onMotionChange)
+  }, [stage, celebrate])
 
-  const unwrap = () => {
+  const finish = () => {
+    clearTimeout(timer.current)
+    setStage("open")
+    setCelebrate(true)
+  }
+
+  const open = () => {
+    // A second tap while the elves are at work skips the show.
+    if (stage === "opening") {
+      finish()
+      return
+    }
     try {
       localStorage.setItem(storageKey, "1")
     } catch {
-      /* Private mode: it just stays wrapped next time. */
+      /* Private mode: it just stays sealed next time. */
     }
     if (prefersReducedMotion()) {
+      setCelebrate(true)
       setStage("open")
       return
     }
     setStage("opening")
-    timer.current = setTimeout(() => {
-      setStage("open")
-      setCelebrate(true)
-    }, 950)
+    timer.current = setTimeout(finish, OPEN_MS)
   }
 
   if (stage !== "open") {
-    const opening = stage === "opening"
     return (
-      <div className="xmas-rise text-center">
-        <button
-          type="button"
-          onClick={unwrap}
-          disabled={opening}
-          aria-label="Unwrap your present"
-          className="group relative mx-auto block rounded-full outline-offset-8"
-        >
-          <span
-            aria-hidden
-            className="absolute inset-0 -z-10 rounded-full blur-2xl transition-opacity duration-500"
-            style={{ background: XMAS.gold, opacity: opening ? 0.55 : 0.2 }}
-          />
-          <GiftBox
-            className={`h-52 w-52 transition-transform duration-200 ease-out group-hover:scale-105 group-active:scale-95 ${opening ? "xmas-shake" : "xmas-wobble"}`}
-            lidClassName={opening ? "xmas-lid-off" : undefined}
-          />
-          {opening && <Burst />}
-        </button>
-        <p className="mt-4 text-2xl font-semibold tracking-tight">The draw is done! 🎉</p>
-        <p className="mt-1 text-sky-100/80">Tap the present to unwrap it</p>
+      <div
+        className={`text-center ${stage === "opening" ? "xmas-stage-out" : "xmas-rise"}`}
+        style={{ "--open": `${OPEN_MS}ms` } as CSSProperties}
+      >
+        <div className="flex h-88 items-end justify-center pb-3">
+          <GoldenLetter opening={stage === "opening"} onOpen={open} />
+        </div>
+        <p className="mt-8 text-2xl font-semibold tracking-tight">L'estrazione è fatta!</p>
+        <p aria-live="polite" className="mt-1" style={{ color: XMAS.muted }}>
+          {stage === "opening"
+            ? "Gli elfi la stanno aprendo… Tocca per saltare."
+            : "È arrivata una lettera dorata per te. Toccala per aprirla."}
+        </p>
       </div>
     )
   }
 
   return (
-    <div className="relative pt-6">
-      {celebrate && <Burst />}
+    <div className={`relative pt-6 ${celebrate ? "pb-9" : ""}`}>
+      {celebrate && <Burst delay={0.15} />}
       <svg aria-hidden viewBox="0 0 100 30" className="mx-auto -mb-1 h-8 w-24">
         <path
           d="M50 30 C 40 12, 20 10, 8 2"
-          stroke={XMAS.gold}
+          stroke={XMAS.goldDark}
           strokeWidth="2"
           fill="none"
           strokeLinecap="round"
         />
       </svg>
       <div
-        className="xmas-tag relative mx-auto max-w-sm rounded-3xl p-6 pt-9 shadow-2xl"
-        style={{ background: PAPER, color: INK }}
+        className="xmas-tag relative mx-auto max-w-sm rounded-3xl border p-6 pt-9 shadow-[0_24px_60px_oklch(35%_0.06_250/0.18)]"
+        style={{ background: PAPER, color: INK, borderColor: XMAS.frost }}
       >
         <span
           aria-hidden
-          className="absolute top-3 left-1/2 size-4 -translate-x-1/2 rounded-full ring-2"
-          style={{ background: XMAS.night, boxShadow: `0 0 0 3px ${XMAS.gold}` }}
+          className="absolute top-3 left-1/2 size-4 -translate-x-1/2 rounded-full"
+          style={{ background: XMAS.ice, boxShadow: `0 0 0 3px ${XMAS.gold}` }}
         />
-        <p className="text-center text-sm tracking-wide text-slate-500 uppercase">
-          You're the Secret Santa of
+        <p className="text-center text-xs tracking-[0.25em] uppercase" style={{ color: XMAS.blue }}>
+          Sei il Secret Santa di
         </p>
-        <p
-          className="mt-1 text-center text-4xl font-semibold tracking-tight text-balance break-words"
-          style={{ color: XMAS.redDark }}
+        <h2
+          ref={revealedName}
+          tabIndex={-1}
+          className="mt-2 text-center text-4xl font-semibold tracking-tight text-balance break-words outline-offset-4"
         >
           {match.name}
-        </p>
-        <div className="mt-5 space-y-4 border-t border-dashed border-slate-300 pt-4">
-          <div>
-            <p className="text-xs font-bold tracking-wider uppercase" style={{ color: XMAS.pine }}>
-              ❤️ Loves
-            </p>
-            <p className="mt-1 whitespace-pre-line break-words">{match.likes}</p>
-          </div>
+        </h2>
+        <div className="mt-5 space-y-4 border-t border-dashed pt-4" style={{ borderColor: XMAS.frost }}>
+          <TagLine icon="heart" label="Ama">
+            {match.likes}
+          </TagLine>
           {match.dislikes && (
-            <div>
-              <p className="text-xs font-bold tracking-wider uppercase" style={{ color: XMAS.pine }}>
-                🙅 Better not
-              </p>
-              <p className="mt-1 whitespace-pre-line break-words">{match.dislikes}</p>
-            </div>
+            <TagLine icon="ban" label="Meglio di no">
+              {match.dislikes}
+            </TagLine>
           )}
         </div>
-        <p className="mt-5 text-center text-sm text-slate-500">
-          Shh… keep it a secret 🤫{exchange && <span className="block">See you at: {exchange}</span>}
+        <p className="mt-5 text-center text-sm" style={{ color: XMAS.muted }}>
+          Mi raccomando, acqua in bocca.
+          {exchange && <span className="block">Ci vediamo a: {exchange}</span>}
         </p>
+        {celebrate && (
+          <>
+            <span aria-hidden className="pointer-events-none absolute -bottom-9 left-3 w-11">
+              <Elf
+                hat={XMAS.red}
+                holding="cane"
+                frontArmRest={-110}
+                backArmRest={12}
+                frontArmClassName="xmas-elf-wave"
+                className="xmas-elf-tag block w-full"
+              />
+            </span>
+            <span aria-hidden className="pointer-events-none absolute right-3 -bottom-9 w-11">
+              <Elf
+                hat={XMAS.pine}
+                holding="gift"
+                frontArmRest={-60}
+                backArmRest={-60}
+                className="xmas-elf-tag block w-full -scale-x-100"
+                style={{ animationDelay: "430ms" }}
+              />
+            </span>
+          </>
+        )}
       </div>
+      <button
+        type="button"
+        onClick={() => {
+          setCelebrate(false)
+          setStage("sealed")
+        }}
+        className="mx-auto mt-5 block min-h-11 px-4 text-sm underline underline-offset-4"
+        style={{ color: XMAS.blue }}
+      >
+        Rivedi l'apertura
+      </button>
+    </div>
+  )
+}
+
+function TagLine({ icon, label, children }: { icon: IconName; label: string; children: ReactNode }) {
+  return (
+    <div>
+      <p
+        className="flex items-center gap-1.5 text-xs font-bold tracking-wider uppercase"
+        style={{ color: XMAS.blue }}
+      >
+        <Icon name={icon} className="size-3.5" />
+        {label}
+      </p>
+      <p className="mt-1 whitespace-pre-line break-words">{children}</p>
     </div>
   )
 }
@@ -688,37 +1228,32 @@ function Reveal({
 function GadgetTicket({ santa }: { santa: SecretSantaView }) {
   const { config, entry } = santa
   if (!config.gadget.enabled || !entry?.gadget) return null
-  const prize = config.gadget.prize || "a PoliNetwork gadget"
 
   if (santa.gadgetWon) {
     return (
       <div
-        className="xmas-rise relative overflow-hidden rounded-3xl p-5 text-center shadow-[0_0_40px_oklch(86%_0.14_88/0.35)]"
-        style={{ background: `linear-gradient(135deg, ${XMAS.gold}, ${XMAS.goldDark})`, color: XMAS.night }}
+        className="xmas-rise relative overflow-hidden rounded-3xl p-5 text-center shadow-[0_16px_40px_oklch(70%_0.14_75/0.35)]"
+        style={{ background: GOLD_FOIL, color: XMAS.navy }}
       >
         <span aria-hidden className="xmas-shimmer absolute inset-y-0 -left-1/3 w-1/3 bg-white/50 blur-md" />
-        <p className="relative text-xs font-black tracking-[0.3em] uppercase">Golden ticket</p>
-        <p className="relative mt-1 text-2xl font-semibold tracking-tight">⭐ You won {prize}! ⭐</p>
-        <p className="relative mt-1 text-sm">We'll hand it to you at the gift exchange.</p>
+        <p className="relative text-xs font-black tracking-[0.3em] uppercase">Biglietto d'oro</p>
+        <p className="relative mt-1 text-2xl font-semibold tracking-tight">Hai vinto {GADGET_NAME}!</p>
+        <p className="relative mt-1 text-sm">Cosa sia lo scoprirai allo scambio dei regali.</p>
       </div>
     )
   }
   return (
     <div
-      className="relative flex items-center gap-4 rounded-2xl border-2 border-dashed px-5 py-4 text-sm"
-      style={{ borderColor: "oklch(86% 0.14 88 / 0.5)", background: "oklch(86% 0.14 88 / 0.08)" }}
+      className="flex items-center gap-4 rounded-2xl border border-dashed bg-white/70 px-5 py-4 text-sm backdrop-blur-sm"
+      style={{ borderColor: XMAS.goldDark }}
     >
-      <span aria-hidden className="text-3xl">
-        🎟
-      </span>
-      <p className="text-sky-50/90">
+      <Icon name="ticket" className="size-7 shrink-0 text-amber-500" />
+      <p style={{ color: XMAS.navy }}>
         {santa.gadgetWon === false ? (
-          <>
-            The draw for <b>{prize}</b> went to someone else this time. Merry Christmas anyway! ✨
-          </>
+          <>Questa volta {GADGET_NAME} è andato a qualcun altro. Buone feste lo stesso!</>
         ) : (
           <>
-            Your name is in the secret draw for <b>{prize}</b>. Fingers crossed! ✨
+            Sei nell'estrazione di <b>{GADGET_NAME}</b>. Incrociamo le dita!
           </>
         )}
       </p>
@@ -730,8 +1265,8 @@ function Spinner() {
   return (
     <div className="flex justify-center py-20">
       <span
-        className="size-8 animate-spin rounded-full border-2 border-white/20"
-        style={{ borderTopColor: XMAS.gold }}
+        className="size-8 animate-spin rounded-full border-2"
+        style={{ borderColor: XMAS.frost, borderTopColor: XMAS.blue }}
       />
     </div>
   )

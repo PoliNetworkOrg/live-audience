@@ -1,5 +1,5 @@
 import { type ReactNode, useState } from "react"
-import { SecretSantaHome } from "../../activities/secret-santa/ui.tsx"
+import { SecretSantaTeasers, useSecretSantas } from "../../activities/secret-santa/ui.tsx"
 import { activityUIs } from "../../activities/ui-registry.ts"
 import { api, loginUrl, logout, type Me, useEventStream, useMe } from "../api.ts"
 
@@ -17,15 +17,7 @@ export function AudiencePage() {
   let content: ReactNode
   if (me.loading && !me.data) content = <Spinner />
   else if (!user) content = <SignIn />
-  // Secret Santa is off stage and open to everyone signed in: non-members see it instead of the lock.
-  else if (!user.canParticipate && !user.isAdmin) content = <SecretSantaHome empty={<NotAMember />} />
-  else
-    content = (
-      <>
-        <SecretSantaHome />
-        <Live />
-      </>
-    )
+  else content = <SignedIn member={user.canParticipate || user.isAdmin} />
 
   return (
     <div className="relative flex min-h-dvh flex-col bg-brand-950 text-white">
@@ -46,7 +38,24 @@ export function AudiencePage() {
   )
 }
 
-function Live() {
+/**
+ * Secret Santa is off stage and open to everyone signed in. While one is visible, its card takes the
+ * place of the idle screen; non-members see it instead of the lock.
+ */
+function SignedIn({ member }: { member: boolean }) {
+  const santas = useSecretSantas()
+  if (!santas) return member ? <Live /> : null
+  const teasers = santas.length > 0 && <SecretSantaTeasers santas={santas} />
+  if (!member) return teasers || <NotAMember />
+  return (
+    <>
+      {teasers}
+      <Live hideIdle={santas.length > 0} />
+    </>
+  )
+}
+
+function Live({ hideIdle = false }: { hideIdle?: boolean }) {
   const [stage, setStage] = useState<AudienceStage | null>(null)
   const [error, setError] = useState<string | null>(null)
   const connected = useEventStream("/api/audience/events", {
@@ -60,6 +69,7 @@ function Live() {
 
   const ui = stage.activity && activityUIs[stage.activity.type]
   if (!stage.activity || !ui) {
+    if (hideIdle) return null
     return (
       <Centered
         icon={<span className="animate-float block text-6xl">✨</span>}
