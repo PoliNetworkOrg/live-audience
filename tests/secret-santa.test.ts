@@ -164,19 +164,20 @@ describe("secret santa", () => {
     expect((await join(leaving)).status).toBe(409)
   })
 
-  it("draws gadget winners secretly among those who opted in", async () => {
+  it("keeps gadget sign-ups but pauses extraction without selecting or showing winners", async () => {
     const { call, join, activity, store } = setup({ gadget: { enabled: true, winners: 1 } })
     await join("a", "x", false)
     await join("b", "x", true)
-    const admin = (await call(`/api/admin/secret-santa/${activity.id}/gadget-draw`, "admin", "POST")).json
-    expect(admin.gadget.winners).toEqual([{ userId: "b", name: "Name b" }])
-    expect((await call("/api/secret-santa", "b")).json[0].gadgetWon).toBe(true)
-    expect((await call("/api/secret-santa", "a")).json[0].gadgetWon).toBeNull()
-    expect(JSON.stringify(store.getResults(activity.id))).not.toContain("Name b")
-
-    // Opting in or out after the gadget draw is ignored.
+    const draw = await call(`/api/admin/secret-santa/${activity.id}/gadget-draw`, "admin", "POST")
+    expect(draw.status).toBe(409)
+    expect((await call("/api/secret-santa", "b")).json[0]).toMatchObject({
+      gadgetWon: null,
+      gadgetDrawn: false,
+      entry: { gadget: true },
+    })
     await join("a", "x", true)
-    expect((await call("/api/secret-santa", "a")).json[0].entry.gadget).toBe(false)
+    expect((await call("/api/secret-santa", "a")).json[0].entry.gadget).toBe(true)
+    expect(store.getResults(activity.id).results).toMatchObject({ gadgetEntries: 2, gadgetDrawn: false })
   })
 
   it("is admin-only to draw, list or remove participants", async () => {

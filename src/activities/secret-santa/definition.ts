@@ -22,6 +22,8 @@ const configSchema = z
     signupsCloseAt: instant,
     /** The gift draw runs on its own at this instant, and everyone gets an email. */
     drawAt: instant,
+    /** Last reminder; confirmations close at the following midnight in Europe/Rome. */
+    confirmationDueAt: instant.default(""),
     intro: text(600),
     /** Where and when gifts are handed over in person. */
     exchange: text(200),
@@ -36,6 +38,13 @@ const configSchema = z
     message: "The draw must come after sign-ups close",
     path: ["drawAt"],
   })
+  .refine(
+    (c) => !c.confirmationDueAt || !c.drawAt || Date.parse(c.confirmationDueAt) > Date.parse(c.drawAt),
+    {
+      message: "Gift confirmation must come after the draw",
+      path: ["confirmationDueAt"],
+    },
+  )
 export type SecretSantaConfig = z.infer<typeof configSchema>
 
 const entrySchema = z.object({
@@ -72,8 +81,11 @@ export interface SecretSantaView {
   entry: SecretSantaEntry | null
   /** Who this person gives a gift to, once drawn. */
   match: { name: string; likes: string; dislikes: string } | null
-  /** null while not drawn or not taking part in the gadget draw. */
+  /** Always null while gadget extraction is paused. */
   gadgetWon: boolean | null
+  giftConfirmedAt: number | null
+  confirmationClosesAt: number | null
+  removed: { at: number; reason: "unconfirmed" } | null
 }
 
 /** How the prize is called everywhere: it stays a surprise. */
@@ -87,6 +99,44 @@ export function signupsOpenAt(config: SecretSantaConfig, now: number) {
 /** Whether the automatic draw is due at `now` (ms). */
 export function drawDueAt(config: SecretSantaConfig, now: number) {
   return Boolean(config.drawAt) && now >= Date.parse(config.drawAt)
+}
+
+/** Midnight after the deadline's Italian calendar date, including CET/CEST transitions. */
+export function confirmationClosesAt(dueAt: string): number | null {
+  if (!dueAt) return null
+  const formatter = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Europe/Rome",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  })
+  const partsAt = (at: number) =>
+    Object.fromEntries(
+      formatter
+        .formatToParts(at)
+        .filter((p) => p.type !== "literal")
+        .map((p) => [p.type, Number(p.value)]),
+    )
+  const day = partsAt(Date.parse(dueAt))
+  const midnight = Date.UTC(Number(day.year), Number(day.month) - 1, Number(day.day) + 1)
+  let at = midnight
+  for (let i = 0; i < 3; i++) {
+    const local = partsAt(at)
+    at -=
+      Date.UTC(
+        Number(local.year),
+        Number(local.month) - 1,
+        Number(local.day),
+        Number(local.hour),
+        Number(local.minute),
+        Number(local.second),
+      ) - midnight
+  }
+  return at
 }
 
 /** One random cycle through everybody, so nobody draws themselves and nobody is left out. */
@@ -131,13 +181,14 @@ export const secretSanta = defineActivity<SecretSantaConfig, SecretSantaEntry, S
   type: "secret-santa",
   label: "Secret Santa",
   description:
-    "Runs off stage for days: people sign up from the home page with a few things they like, then one draw gives everyone a person to surprise. Optional gadget draw.",
+    "Runs off stage for days: people sign up, receive a person to surprise and confirm their gift. Optional gadget sign-ups; gadget extraction is paused.",
   configSchema,
   defaultConfig: () => ({
     visible: false,
     signupsOpen: true,
     signupsCloseAt: "",
     drawAt: "",
+    confirmationDueAt: "",
     intro:
       "Iscriviti, raccontaci cosa ti piace e riceverai una persona da sorprendere con un piccolo regalo.",
     exchange: "",

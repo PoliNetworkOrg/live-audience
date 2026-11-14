@@ -166,6 +166,13 @@ export function createApp({ store, session }: { store: Store; session: Middlewar
   const santa = new Hono<AppEnv>()
     .use(requireUser(() => true))
     .get("/", (c) => c.json(store.listSecretSantas((c.get("user") as SessionUser).id)))
+    .post("/:id/confirm-gift", (c) => {
+      // JSON requests cannot be submitted by cross-site forms.
+      if (!/^application\/json(?:\s*;|$)/i.test(c.req.header("content-type") ?? "")) {
+        throw new HTTPException(415, { message: "Use application/json" })
+      }
+      return c.json(store.confirmSecretSantaGift(c.req.param("id"), (c.get("user") as SessionUser).id))
+    })
     .put("/:id/entry", async (c) => {
       const user = c.get("user") as SessionUser
       const body = await c.req.json().catch(() => null)

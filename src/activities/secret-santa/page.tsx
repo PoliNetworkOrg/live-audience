@@ -48,6 +48,7 @@ function useNow(intervalMs = 1000) {
 
 function formatWhen(iso: string) {
   return new Date(iso).toLocaleString("it-IT", {
+    timeZone: "Europe/Rome",
     weekday: "short",
     day: "numeric",
     month: "long",
@@ -145,7 +146,7 @@ function SignedOut() {
         Accedi con il tuo account PoliNetwork per scrivere la tua letterina e scoprire chi devi sorprendere.
       </p>
       <a
-        href={loginUrl(SECRET_SANTA_PATH)}
+        href={loginUrl(`${SECRET_SANTA_PATH}${window.location.search}${window.location.hash}`)}
         className="inline-flex w-full items-center justify-center rounded-full px-6 py-4 text-lg font-semibold text-white shadow-lg transition active:scale-[0.97]"
         style={{ background: XMAS.blue }}
       >
@@ -200,10 +201,10 @@ function SantaExperience({
   // Once the automatic draw is due, look for it every 10 s, so the golden letter shows up by itself.
   const drawDue = !santa.drawn && Boolean(santa.config.drawAt) && now >= Date.parse(santa.config.drawAt)
   useEffect(() => {
-    if (!drawDue) return
+    if (!drawDue && !santa.drawn) return
     const timer = setInterval(reload, 10_000)
     return () => clearInterval(timer)
-  }, [drawDue, reload])
+  }, [drawDue, santa.drawn, reload])
   const canJoin =
     santa.canJoin && !(santa.config.signupsCloseAt && now >= Date.parse(santa.config.signupsCloseAt))
   const [wantsEditing, setEditing] = useState(false)
@@ -253,6 +254,16 @@ function SantaExperience({
         }}
       />
     )
+  } else if (santa.removed) {
+    body = (
+      <Paper className="text-center">
+        <h2 className="text-2xl font-semibold">Sei stato rimosso da questo Secret Santa</h2>
+        <p className="mt-3" style={{ color: XMAS.muted }}>
+          Non hai confermato di aver preso il regalo entro la mezzanotte prevista. Gli abbinamenti sono stati
+          aggiornati e non puoi più partecipare a questo giro.
+        </p>
+      </Paper>
+    )
   } else if (!entry && !canJoin) {
     body = (
       <Paper className="text-center">
@@ -296,6 +307,9 @@ function SantaExperience({
       <Steps santa={santa} />
       {!santa.drawn && <Countdown santa={santa} now={now} canJoin={canJoin} />}
       {body}
+      {entry && santa.drawn && santa.match && (
+        <GiftConfirmation santa={santa} now={now} onChange={onChange} />
+      )}
       {entry && !editing && !santa.hasEmail && !santa.drawn && (
         <Note>
           Non abbiamo il tuo indirizzo email, quindi non possiamo avvisarti dell'estrazione. Torna qui
@@ -335,6 +349,84 @@ function SantaExperience({
         </div>
       )}
     </article>
+  )
+}
+
+function GiftConfirmation({
+  santa,
+  now,
+  onChange,
+}: {
+  santa: SecretSantaView
+  now: number
+  onChange: (s: SecretSantaView) => void
+}) {
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const section = useRef<HTMLElement>(null)
+  useEffect(() => {
+    if (window.location.hash === `#gift-confirmation-${santa.id}`)
+      section.current?.scrollIntoView({ block: "start" })
+  }, [santa.id])
+  const confirmed = santa.giftConfirmedAt !== null
+  const expired = santa.confirmationClosesAt !== null && now >= santa.confirmationClosesAt
+  const confirm = async () => {
+    if (saving || confirmed || expired) return
+    setSaving(true)
+    try {
+      onChange(
+        await api<SecretSantaView>(`/api/secret-santa/${santa.id}/confirm-gift`, {
+          method: "POST",
+          body: {},
+        }),
+      )
+      setError(null)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Conferma non riuscita. Riprova.")
+    } finally {
+      setSaving(false)
+    }
+  }
+  return (
+    <section
+      ref={section}
+      id={`gift-confirmation-${santa.id}`}
+      className="scroll-mt-6 rounded-3xl border bg-white p-6 text-center shadow-sm"
+      style={{ borderColor: XMAS.frost }}
+    >
+      <h2 aria-live="polite" className="text-xl font-semibold">
+        {confirmed ? "Il tuo regalo è pronto!" : "Hai preso il regalo?"}
+      </h2>
+      <p className="mt-2 text-sm" style={{ color: XMAS.muted }}>
+        {confirmed
+          ? "Conferma registrata. Portalo con te allo scambio dei regali. Se cambia il destinatario, la conferma resta valida."
+          : expired
+            ? "Il termine per confermare è scaduto. Stiamo aggiornando le partecipazioni."
+            : "Quando lo hai acquistato o preparato, confermalo qui. Non serve averlo già consegnato."}
+      </p>
+      {!confirmed && santa.config.confirmationDueAt && (
+        <p className="mt-3 text-sm" style={{ color: XMAS.blue }}>
+          Conferma entro {formatWhen(santa.config.confirmationDueAt)}. Ultima possibilità fino alle 23:59
+          dello stesso giorno, ora italiana; poi sarai rimosso e gli abbinamenti verranno aggiornati.
+        </p>
+      )}
+      {!confirmed && (
+        <button
+          type="button"
+          disabled={saving || expired}
+          onClick={() => void confirm()}
+          className="mt-4 min-h-12 rounded-full px-6 py-3 font-semibold text-white disabled:opacity-50"
+          style={{ background: XMAS.blue }}
+        >
+          {saving ? "Conferma in corso…" : "Ho preso il regalo"}
+        </button>
+      )}
+      {error && (
+        <p role="alert" className="mt-3 text-sm text-rose-700">
+          {error}
+        </p>
+      )}
+    </section>
   )
 }
 
@@ -389,6 +481,12 @@ function Hero({ santa, now }: { santa: SecretSantaView; now: number }) {
     config.drawAt && { icon: "shuffle", label: "Estrazione", value: formatWhen(config.drawAt) },
     config.exchange && { icon: "gift", label: "Scambio dei regali", value: config.exchange },
     config.budget && { icon: "coins", label: "Budget", value: config.budget },
+    santa.drawn &&
+      config.confirmationDueAt && {
+        icon: "check",
+        label: "Conferma regalo entro",
+        value: formatWhen(config.confirmationDueAt),
+      },
   ].filter(Boolean) as { icon: IconName; label: string; value: string }[]
   return (
     <section className="xmas-rise space-y-5 text-center">
@@ -665,9 +763,9 @@ function Letter({
               style={{ accentColor: XMAS.blue }}
             />
             <span>
-              Partecipo anche all'estrazione di <b>{GADGET_NAME}</b>
+              Mi iscrivo anche per <b>{GADGET_NAME}</b>
               <span className="block" style={{ color: XMAS.muted }}>
-                {gadgetLocked ? "Il gadget è già stato estratto." : "Cosa sia, lo scopre solo chi vince."}
+                Per ora raccogliamo solo le adesioni. La sorpresa arriverà più avanti.
               </span>
             </span>
             <Icon name="ticket" className="ml-auto size-5 shrink-0 text-amber-500" />
@@ -1229,19 +1327,6 @@ function GadgetTicket({ santa }: { santa: SecretSantaView }) {
   const { config, entry } = santa
   if (!config.gadget.enabled || !entry?.gadget) return null
 
-  if (santa.gadgetWon) {
-    return (
-      <div
-        className="xmas-rise relative overflow-hidden rounded-3xl p-5 text-center shadow-[0_16px_40px_oklch(70%_0.14_75/0.35)]"
-        style={{ background: GOLD_FOIL, color: XMAS.navy }}
-      >
-        <span aria-hidden className="xmas-shimmer absolute inset-y-0 -left-1/3 w-1/3 bg-white/50 blur-md" />
-        <p className="relative text-xs font-black tracking-[0.3em] uppercase">Biglietto d'oro</p>
-        <p className="relative mt-1 text-2xl font-semibold tracking-tight">Hai vinto {GADGET_NAME}!</p>
-        <p className="relative mt-1 text-sm">Cosa sia lo scoprirai allo scambio dei regali.</p>
-      </div>
-    )
-  }
   return (
     <div
       className="flex items-center gap-4 rounded-2xl border border-dashed bg-white/70 px-5 py-4 text-sm backdrop-blur-sm"
@@ -1249,13 +1334,7 @@ function GadgetTicket({ santa }: { santa: SecretSantaView }) {
     >
       <Icon name="ticket" className="size-7 shrink-0 text-amber-500" />
       <p style={{ color: XMAS.navy }}>
-        {santa.gadgetWon === false ? (
-          <>Questa volta {GADGET_NAME} è andato a qualcun altro. Buone feste lo stesso!</>
-        ) : (
-          <>
-            Sei nell'estrazione di <b>{GADGET_NAME}</b>. Incrociamo le dita!
-          </>
-        )}
+        Adesione registrata per <b>{GADGET_NAME}</b>. La sorpresa arriverà più avanti.
       </p>
     </div>
   )

@@ -58,6 +58,16 @@ function Editor({
           />
         </Field>
       </div>
+      <Field
+        label="Conferma regalo entro"
+        hint="Alla scadenza mandiamo l'ultimo avviso. Rimozione dei non confermati alla mezzanotte italiana dello stesso giorno. Vuoto: nessuna rimozione automatica."
+      >
+        <Input
+          type="datetime-local"
+          value={toLocalInput(config.confirmationDueAt)}
+          onChange={(e) => set({ confirmationDueAt: fromLocalInput(e.target.value) })}
+        />
+      </Field>
       <div className="grid gap-3 sm:grid-cols-2">
         <Field label="Gift exchange" hint="When and where, in person">
           <Input
@@ -72,21 +82,11 @@ function Editor({
       </div>
       <hr className="border-slate-100" />
       <Checkbox checked={config.gadget.enabled} onChange={(enabled) => setGadget({ enabled })}>
-        Gadget draw: people can also enter a draw for {GADGET_NAME} (it stays a surprise)
+        Raccogli adesioni per {GADGET_NAME}
       </Checkbox>
-      {config.gadget.enabled && (
-        <div className="grid gap-3 sm:grid-cols-[8rem]">
-          <Field label="Winners">
-            <Input
-              type="number"
-              min={1}
-              max={20}
-              value={config.gadget.winners}
-              onChange={(e) => setGadget({ winners: Math.trunc(Number(e.target.value)) || 1 })}
-            />
-          </Field>
-        </div>
-      )}
+      <p className="text-xs text-slate-500">
+        Per ora raccogliamo solo le adesioni al gadget. L'estrazione è sospesa.
+      </p>
     </div>
   )
 }
@@ -130,11 +130,7 @@ function Results({ config, results }: { config: SecretSantaConfig; results: Secr
     <ul className="space-y-1 text-sm">
       <li>{results.participants} signed up</li>
       <li>{results.drawn ? "Gift draw done" : "Gift draw not done yet"}</li>
-      {config.gadget.enabled && (
-        <li>
-          {results.gadgetEntries} in the gadget draw{results.gadgetDrawn ? ", winners drawn" : ""}
-        </li>
-      )}
+      {config.gadget.enabled && <li>{results.gadgetEntries} adesioni al gadget</li>}
     </ul>
   )
 }
@@ -143,7 +139,14 @@ interface AdminView {
   drawnAt: number | null
   withoutEmail: number
   emailsSent: number
-  participants: { userId: string; name: string; gadget: boolean; hasMatch: boolean | null }[]
+  participants: {
+    userId: string
+    name: string
+    gadget: boolean
+    hasMatch: boolean | null
+    giftConfirmedAt: number | null
+  }[]
+  removed: { userId: string; name: string; at: number }[]
   gadget: { drawnAt: number; winners: { userId: string; name: string }[] } | null
 }
 
@@ -165,7 +168,7 @@ function Admin({ activityId, config }: { activityId: string; config: SecretSanta
   }
 
   if (!view.data) return null
-  const { participants, drawnAt, gadget, withoutEmail, emailsSent } = view.data
+  const { participants, drawnAt, withoutEmail, emailsSent, removed } = view.data
   const unmatched = participants.filter((p) => p.hasMatch === false)
   return (
     <Card className="space-y-4">
@@ -199,18 +202,6 @@ function Admin({ activityId, config }: { activityId: string; config: SecretSanta
             Undo draw
           </Button>
         )}
-        {config.gadget.enabled && (
-          <Button
-            variant="secondary"
-            className="ml-2"
-            disabled={gadget !== null}
-            onClick={() =>
-              void run("/gadget-draw", "POST", "Draw the gadget winners now? Entries for it close for good.")
-            }
-          >
-            {gadget ? "Gadget drawn" : "Draw gadget"}
-          </Button>
-        )}
         {drawnAt !== null && (
           <p className="rounded-lg bg-amber-50 p-2 text-xs text-amber-900">
             Gifts were drawn on {new Date(drawnAt).toLocaleString()}. Sign-ups stay closed and the dates in
@@ -230,11 +221,10 @@ function Admin({ activityId, config }: { activityId: string; config: SecretSanta
           {withoutEmail > 0 && ` ${withoutEmail} without an email address: they will not get the email.`}
         </p>
       </div>
-      {gadget && (
-        <div className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">
-          <p className="font-medium">Gadget winners</p>
-          <p>{gadget.winners.map((w) => w.name).join(", ") || "Nobody left: every winner withdrew"}</p>
-        </div>
+      {removed.length > 0 && (
+        <p className="rounded-lg bg-rose-50 p-3 text-sm text-rose-700">
+          Rimossi per mancata conferma: {removed.map((p) => p.name).join(", ")}.
+        </p>
       )}
       {unmatched.length > 0 && (
         <p className="rounded-lg bg-rose-50 p-3 text-sm text-rose-700">
@@ -247,8 +237,17 @@ function Admin({ activityId, config }: { activityId: string; config: SecretSanta
           <li key={p.userId} className="flex items-center gap-2 py-1.5">
             <span className="mr-auto break-words">
               {p.name}
+              {drawnAt !== null && (
+                <span className="ml-2 text-xs text-slate-500">
+                  {p.giftConfirmedAt !== null
+                    ? "Regalo confermato"
+                    : p.hasMatch
+                      ? "Da confermare"
+                      : "Senza destinatario"}
+                </span>
+              )}
               {config.gadget.enabled && p.gadget && (
-                <span className="ml-1 text-xs text-slate-400" title="In the gadget draw">
+                <span className="ml-1 text-xs text-slate-400" title="Iscritto al gadget">
                   · gadget
                 </span>
               )}
@@ -348,6 +347,7 @@ export function SecretSantaTeasers({ santas }: { santas: SecretSantaView[] }) {
 }
 
 function teaserStatus(santa: SecretSantaView) {
+  if (santa.removed) return "Sei stato rimosso per mancata conferma del regalo"
   if (!santa.entry)
     return santa.canJoin ? "Scrivi la tua letterina per partecipare" : "Le iscrizioni sono chiuse"
   if (!santa.drawn) return "Ci sei! In attesa dell'estrazione"

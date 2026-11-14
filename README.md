@@ -6,7 +6,7 @@ Live audience interaction (polls, word clouds, a prize wheel, a number lottery a
 - **Admin page** (`/admin`): create and edit activities, put them on stage by hand, preview results, manage the API key. Reserved to an IdP permission.
 - **Presentation API** (`/api/v1`): one global API key lets an HTML presentation open/close activities as slides change and read live results to draw its own charts.
 
-- **Secret Santa** (off stage): an admin makes it visible and anyone signed in, Soci or not, writes a "letter" with a few things they like on the Christmas-themed `/secret-santa` page (the home page shows a small invitation to it). Sign-ups close at a set date and time, and the gift draw runs on its own at another (or the admin runs it by hand); everyone signed up then gets an email linking to the page, where a golden letter opens to reveal their match; each person sees only who they give a gift to (gifts are handed over in person). Withdrawing after the draw only rewires the withdrawn person's Santa. An optional gadget draw picks winners among those who opt in. Pairings and winners never go through the API key.
+- **Secret Santa** (off stage): anyone signed in, Soci or not, writes a letter on the Christmas-themed `/secret-santa` page. The admin sets sign-up and draw dates. After the gift draw, letters cannot be edited; each participant sees only their own recipient and confirms when they have bought or prepared the gift. At the optional confirmation deadline, unconfirmed participants receive a final warning and can still confirm until midnight of that calendar day in Europe/Rome. At midnight they are removed and the gift cycle is rewired, with removal/reassignment emails. Confirmations of reassigned participants stay valid. Gadget participation is collected, but its draw and winner reveal are currently suspended. Private matches, confirmations and contact details never leave through the presentation API key.
 
 There is exactly one stage, so exactly one presentation at a time: no join codes, no QR codes. Signing in is the ticket.
 
@@ -69,6 +69,25 @@ Roles and permissions are read from the ID token (`polinetwork_roles`, `polinetw
 | `DEV_LOGIN` | `false` | Local fake sign-in |
 
 ## Deployment
+
+### Secret Santa emails
+
+Live sends template data to the PoliNetwork backend; the backend uses its existing transactional sender.
+Set `MAILER_URL` on Live to `https://<backend>/internal/secret-santa/emails` and set the same random secret
+(at least 32 characters) in Live's `MAILER_TOKEN` and the backend's `LIVE_MAILER_TOKEN`. Set backend
+`LIVE_PUBLIC_URL` to Live's public origin (default `https://live.polinetwork.org`); email links are restricted
+to its `/secret-santa` page. HTTPS is required, except for localhost development.
+
+Without transport configuration, development logs notifications. In production missing configuration
+or delivery errors leave emails pending for retry; they are never marked as sent by logging. Configure
+delivery before enabling a confirmation deadline. A server outage does not extend the configured
+midnight deadline; warnings that have expired are replaced by removal notifications on recovery.
+Normal successful notifications are recorded once; a lost HTTP response after provider acceptance can
+cause a retry. The backend supplies stable Message-IDs for reconciliation.
+
+Email links require sign-in and an explicit confirmation button. Opening a link or email cannot confirm
+a gift. The date field is an ISO instant; midnight is calculated in Europe/Rome, including DST changes.
+Reset/undo starts a new round and clears confirmations and removal notices. See `docs/secret-santa/`.
 
 ```sh
 docker build -t live-audience .

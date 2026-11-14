@@ -7,6 +7,18 @@ const schema = z
     /** Origin users open in the browser. In dev that is the Vite server, which proxies to this one. */
     PUBLIC_URL: z.url().default("http://localhost:5173"),
     DATABASE_PATH: z.string().default("data/live-audience.db"),
+    MAILER_URL: z
+      .url()
+      .refine((value) => {
+        const url = new URL(value)
+        return (
+          !url.username &&
+          !url.password &&
+          (url.protocol === "https:" || (url.protocol === "http:" && isLocalhost(value)))
+        )
+      }, "MAILER_URL must use HTTPS (HTTP is allowed only on localhost)")
+      .optional(),
+    MAILER_TOKEN: z.string().min(32).optional(),
 
     /** Issuer of the PoliNetwork IdP, e.g. https://auth.polinetwork.org/api/auth */
     OIDC_ISSUER: z.url().optional(),
@@ -29,6 +41,10 @@ const schema = z
   .refine((env) => env.DEV_LOGIN || (env.OIDC_ISSUER && env.OIDC_CLIENT_ID && env.OIDC_CLIENT_SECRET), {
     message: "Set OIDC_ISSUER, OIDC_CLIENT_ID and OIDC_CLIENT_SECRET (or DEV_LOGIN=1 for local development)",
     path: ["OIDC_ISSUER"],
+  })
+  .refine((env) => Boolean(env.MAILER_URL) === Boolean(env.MAILER_TOKEN), {
+    message: "Set MAILER_URL and MAILER_TOKEN together",
+    path: ["MAILER_URL"],
   })
 
 function isLocalhost(url: string) {
