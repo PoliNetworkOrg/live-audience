@@ -103,6 +103,15 @@ interface SantaRemoval {
   deadline: string
   sentAt: number | null
 }
+type SantaLeaveReason = "withdrawn" | "unconfirmed" | "admin"
+/** Someone who left the cycle, kept so the organizers can readmit them with their letter. */
+interface SantaArchived {
+  name: string
+  email?: string
+  entry: SecretSantaEntry
+  reason: SantaLeaveReason
+  at: number
+}
 export interface SecretSantaStatusMail {
   activityId: string
   userId: string
@@ -552,15 +561,27 @@ export class Store {
       throw new StoreError(409, "Le iscrizioni sono chiuse")
     }
     const data = parsed.data
-    this.db
-      .prepare(
-        `INSERT INTO responses (activity_id, user_id, user_name, response, updated_at, user_email)
+    const archived = this.getSetting<Record<string, SantaArchived>>(`santa-archived:${activity.id}`) ?? {}
+    const wasArchived = Object.hasOwn(archived, user.id)
+    delete archived[user.id]
+    this.db.exec("BEGIN")
+    try {
+      this.db
+        .prepare(
+          `INSERT INTO responses (activity_id, user_id, user_name, response, updated_at, user_email)
          VALUES (?, ?, ?, ?, ?, ?)
          ON CONFLICT (activity_id, user_id) DO UPDATE SET
            user_name = excluded.user_name, response = excluded.response, updated_at = excluded.updated_at,
            user_email = coalesce(excluded.user_email, responses.user_email)`,
-      )
-      .run(activity.id, user.id, user.name, JSON.stringify(data), Date.now(), user.email ?? null)
+        )
+        .run(activity.id, user.id, user.name, JSON.stringify(data), Date.now(), user.email ?? null)
+      // Signing up again themselves: they are no longer a former participant.
+      if (wasArchived) this.setSetting(`santa-archived:${activity.id}`, archived)
+      this.db.exec("COMMIT")
+    } catch (error) {
+      this.db.exec("ROLLBACK")
+      throw error
+    }
     this.events.emit("results", activity.id)
     return this.secretSantaView(activity, config, user.id)
   }
@@ -662,7 +683,8 @@ export class Store {
       this.db.prepare("DELETE FROM settings WHERE key = ?").run(`santa-draw:${activity.id}`)
       this.db.prepare("DELETE FROM settings WHERE key = ?").run(`santa-mail:${activity.id}`)
       this.db.prepare("DELETE FROM settings WHERE key = ?").run(`santa-reassign:${activity.id}`)
-      for (const key of ["confirmed", "warnings", "removed"]) {
+      // The archive of former participants survives, so they can still be readmitted.
+      for (const key of ["confirmed", "warnings", "removed", "letter-edited"]) {
         this.db.prepare("DELETE FROM settings WHERE key = ?").run(`santa-${key}:${activity.id}`)
       }
       if (actor && draw)
@@ -723,6 +745,32 @@ export class Store {
         }
       })
       .sort((a, b) => a.name.localeCompare(b.name))
+    const archived = this.getSetting<Record<string, SantaArchived>>(`santa-archived:${activity.id}`) ?? {}
+    const letterEdited = this.getSetting<Record<string, number>>(`santa-letter-edited:${activity.id}`) ?? {}
+    const active = new Set(responses.map((r) => r.userId))
+    const formerParticipants = [
+      ...Object.entries(archived).map(([userId, p]) => ({
+        userId,
+        name: p.name,
+        email: p.email ?? null,
+        reason: p.reason,
+        at: p.at,
+        entry: p.entry as SecretSantaEntry | null,
+      })),
+      // Removals recorded before the archive existed: the letter was not kept.
+      ...Object.entries(removed)
+        .filter(([userId]) => !Object.hasOwn(archived, userId))
+        .map(([userId, p]) => ({
+          userId,
+          name: p.name,
+          email: p.email ?? null,
+          reason: "unconfirmed" as SantaLeaveReason,
+          at: p.at,
+          entry: null,
+        })),
+    ]
+      .filter((p) => !active.has(p.userId))
+      .sort((a, b) => b.at - a.at || a.name.localeCompare(b.name))
     const revision = createHash("sha256")
       .update(
         JSON.stringify({
@@ -732,6 +780,8 @@ export class Store {
           removed: Object.fromEntries(
             Object.entries(removed).map(([id, { sentAt: _, ...person }]) => [id, person]),
           ),
+          archived,
+          letterEdited,
         }),
       )
       .digest("hex")
@@ -755,6 +805,7 @@ export class Store {
         pending: participants.filter((p) => p.hasMatch && p.giftConfirmedAt === null).length,
         unmatched: participants.filter((p) => p.hasMatch === false).length,
         removed: Object.keys(removed).length,
+        former: formerParticipants.length,
         gadget: participants.filter((p) => p.gadget).length,
       },
       history: history.map((row) => ({
@@ -767,6 +818,8 @@ export class Store {
       })),
       drawnAt: draw?.drawnAt ?? null,
       removed: Object.entries(removed).map(([userId, p]) => ({ userId, name: p.name, at: p.at })),
+      /** Who withdrew or was removed and is not active now, newest first: they can be readmitted. */
+      formerParticipants,
       /** How many signed-up people have no email address, and how many draw emails went out. */
       withoutEmail: responses.filter(({ userId }) => !emails.get(userId)).length,
       emailsSent: responses.filter(({ userId }) => sent.has(userId)).length,
@@ -903,6 +956,215 @@ export class Store {
     return this.getSecretSantaAdmin(activity.id)
   }
 
+  /**
+   * Admin: brings back someone who withdrew or was removed. After the draw they join the cycle right
+   * after `giverId`, who now gives them a gift; they give one to whoever `giverId` had. Nobody else changes.
+   */
+  readmitSecretSantaParticipant(
+    idOrSlug: string,
+    userId: string,
+    actor: SantaAdminActor,
+    input: { revision: string; reason: string; entry: unknown; giverId?: string | null; confirmed: boolean },
+  ) {
+    const { activity, config } = this.requireSecretSanta(idOrSlug)
+    this.assertSantaAdminRevision(activity.id, input.revision)
+    const now = Date.now()
+    const people = this.listResponses(activity.id)
+    if (people.some((p) => p.userId === userId))
+      throw new StoreError(409, "Questa persona partecipa già a questo giro")
+    const archived = this.getSetting<Record<string, SantaArchived>>(`santa-archived:${activity.id}`) ?? {}
+    const removed = this.getSetting<Record<string, SantaRemoval>>(`santa-removed:${activity.id}`) ?? {}
+    // Plain objects from JSON: an id like "constructor" must not resolve to an inherited member.
+    const archivedRecord = Object.hasOwn(archived, userId) ? archived[userId] : undefined
+    const removal = Object.hasOwn(removed, userId) ? removed[userId] : undefined
+    const former = archivedRecord ?? removal
+    if (!former) throw new StoreError(404, "Questa persona non risulta tra i rimossi o ritirati")
+    const formerReason: SantaLeaveReason = archivedRecord?.reason ?? "unconfirmed"
+    const parsed = secretSanta.responseSchema(config).safeParse(input.entry)
+    if (!parsed.success) throw new StoreError(400, "Letterina non valida", parsed.error.issues)
+    const entry = parsed.data
+    const giverId = input.giverId ?? null
+    const draw = this.getSetting<SecretSantaDraw>(`santa-draw:${activity.id}`)
+    const nameOf = (id: string | null | undefined) =>
+      id === userId ? former.name : (people.find((p) => p.userId === id)?.userName ?? null)
+
+    let assignments: Record<string, string | null> | null = null
+    let previousReceiver: string | null = null
+    if (!draw) {
+      if (giverId !== null)
+        throw new StoreError(400, "Prima dell'estrazione non si sceglie chi farà il regalo a questa persona")
+    } else if (!people.length) {
+      if (giverId !== null)
+        throw new StoreError(400, "Non ci sono partecipanti attivi che possano fare il regalo")
+      assignments = { ...draw.assignments, [userId]: null }
+    } else {
+      if (giverId === null) throw new StoreError(400, "Scegli chi farà il regalo a questa persona")
+      if (!people.some((p) => p.userId === giverId))
+        throw new StoreError(400, "Chi fa il regalo deve partecipare a questo giro")
+      previousReceiver = draw.assignments[giverId] ?? null
+      assignments = { ...draw.assignments, [giverId]: userId, [userId]: previousReceiver ?? giverId }
+      if (!isSingleCycle([...people.map((p) => p.userId), userId], assignments))
+        throw new StoreError(
+          409,
+          "Gli abbinamenti attuali non formano un unico giro: correggili prima di riammettere questa persona",
+        )
+    }
+    const willMatch = Boolean(assignments?.[userId])
+    if (input.confirmed && !willMatch)
+      throw new StoreError(409, "Questa persona non ha un regalo da confermare")
+    const closesAt = confirmationClosesAt(config.confirmationDueAt)
+    const deadlinePassed = closesAt !== null && now >= closesAt
+    if (deadlinePassed && willMatch && !input.confirmed)
+      throw new StoreError(
+        409,
+        "La scadenza per confermare il regalo è passata: per riammettere questa persona segna il regalo come già preso",
+      )
+
+    const confirmations = this.getSetting<Record<string, number>>(`santa-confirmed:${activity.id}`) ?? {}
+    if (input.confirmed) confirmations[userId] = now
+    else delete confirmations[userId]
+    // A Santa who had nobody gains a match too and could never have confirmed: after the deadline the
+    // midnight job would remove them, so the organizer's confirmation covers both of them.
+    const confirmGiver =
+      deadlinePassed &&
+      giverId !== null &&
+      previousReceiver === null &&
+      !Object.hasOwn(confirmations, giverId)
+        ? giverId
+        : null
+    if (confirmGiver !== null) confirmations[confirmGiver] = now
+    const warnings = this.getSetting<Record<string, SantaWarning>>(`santa-warnings:${activity.id}`) ?? {}
+    delete warnings[userId]
+    delete removed[userId]
+    delete archived[userId]
+    const letterEdited = this.getSetting<Record<string, number>>(`santa-letter-edited:${activity.id}`) ?? {}
+    delete letterEdited[userId]
+
+    const notices = this.getSetting<SecretSantaReassignNotice[]>(`santa-reassign:${activity.id}`) ?? []
+    const sent = new Set(this.getSetting<string[]>(`santa-mail:${activity.id}`) ?? [])
+    const notify = (id: string, withdrawnName: string) => {
+      const index = notices.findIndex((n) => n.giverId === id)
+      const old = index >= 0 ? notices[index] : undefined
+      if (index >= 0) notices.splice(index, 1)
+      if (sent.has(id))
+        notices.push({
+          giverId: id,
+          withdrawnName: old?.withdrawnName ?? withdrawnName,
+          reason: "admin",
+          at: Math.max(now, (old?.at ?? 0) + 1),
+        })
+    }
+    // Someone never emailed gets the ordinary draw email instead, from pendingSecretSantaMails.
+    if (giverId !== null) notify(giverId, nameOf(previousReceiver) ?? "")
+    if (willMatch) notify(userId, "")
+
+    const changes: SantaAdminChange[] = [
+      {
+        userId,
+        name: former.name,
+        field: "Partecipazione",
+        before: LEAVE_LABELS[formerReason],
+        after: "Attivo",
+      },
+    ]
+    if (assignments && giverId !== null)
+      changes.push({
+        userId: giverId,
+        name: nameOf(giverId) ?? "",
+        field: "Destinatario",
+        before: nameOf(previousReceiver),
+        after: former.name,
+      })
+    if (assignments?.[userId])
+      changes.push({
+        userId,
+        name: former.name,
+        field: "Destinatario",
+        before: null,
+        after: nameOf(assignments[userId]),
+      })
+    changes.push(...entryChanges(userId, former.name, archivedRecord?.entry ?? null, entry))
+    if (input.confirmed)
+      changes.push({
+        userId,
+        name: former.name,
+        field: "Conferma regalo",
+        before: "Da confermare",
+        after: "Confermato",
+      })
+    if (confirmGiver !== null)
+      changes.push({
+        userId: confirmGiver,
+        name: nameOf(confirmGiver) ?? "",
+        field: "Conferma regalo",
+        before: "Da confermare",
+        after: "Confermato",
+      })
+
+    this.db.exec("BEGIN")
+    try {
+      this.db
+        .prepare(
+          `INSERT INTO responses (activity_id, user_id, user_name, response, updated_at, user_email)
+           VALUES (?, ?, ?, ?, ?, ?)`,
+        )
+        .run(activity.id, userId, former.name, JSON.stringify(entry), now, former.email ?? null)
+      if (draw && assignments) {
+        this.setSetting(`santa-draw:${activity.id}`, { ...draw, assignments })
+        this.setSetting(`santa-reassign:${activity.id}`, notices)
+      }
+      this.setSetting(`santa-confirmed:${activity.id}`, confirmations)
+      this.setSetting(`santa-warnings:${activity.id}`, warnings)
+      this.setSetting(`santa-removed:${activity.id}`, removed)
+      this.setSetting(`santa-archived:${activity.id}`, archived)
+      this.setSetting(`santa-letter-edited:${activity.id}`, letterEdited)
+      this.recordSantaAdminAction(activity.id, actor, "Riammissione", input.reason, changes)
+      this.db.exec("COMMIT")
+    } catch (error) {
+      this.db.exec("ROLLBACK")
+      throw error
+    }
+    this.events.emit("results", activity.id)
+    return this.getSecretSantaAdmin(activity.id)
+  }
+
+  /** Admin: corrects an active participant's letter. Their Santa sees that it was updated, no email. */
+  updateSecretSantaEntry(
+    idOrSlug: string,
+    userId: string,
+    actor: SantaAdminActor,
+    input: { revision: string; reason: string; entry: unknown },
+  ) {
+    const { activity, config } = this.requireSecretSanta(idOrSlug)
+    this.assertSantaAdminRevision(activity.id, input.revision)
+    const person = (this.listResponses(activity.id) as StoredResponse<SecretSantaEntry>[]).find(
+      (p) => p.userId === userId,
+    )
+    if (!person) throw new StoreError(404, "La persona non partecipa a questo giro")
+    const parsed = secretSanta.responseSchema(config).safeParse(input.entry)
+    if (!parsed.success) throw new StoreError(400, "Letterina non valida", parsed.error.issues)
+    const changes = entryChanges(userId, person.userName, person.response, parsed.data)
+    if (!changes.length) return this.getSecretSantaAdmin(activity.id)
+    const now = Date.now()
+    const drawn = Boolean(this.getSetting(`santa-draw:${activity.id}`))
+    const letterEdited = this.getSetting<Record<string, number>>(`santa-letter-edited:${activity.id}`) ?? {}
+    letterEdited[userId] = now
+    this.db.exec("BEGIN")
+    try {
+      this.db
+        .prepare("UPDATE responses SET response = ?, updated_at = ? WHERE activity_id = ? AND user_id = ?")
+        .run(JSON.stringify(parsed.data), now, activity.id, userId)
+      if (drawn) this.setSetting(`santa-letter-edited:${activity.id}`, letterEdited)
+      this.recordSantaAdminAction(activity.id, actor, "Letterina", input.reason, changes)
+      this.db.exec("COMMIT")
+    } catch (error) {
+      this.db.exec("ROLLBACK")
+      throw error
+    }
+    this.events.emit("results", activity.id)
+    return this.getSecretSantaAdmin(activity.id)
+  }
+
   private requireSecretSanta(idOrSlug: string) {
     const activity = this.requireActivity(idOrSlug)
     if (activity.type !== secretSanta.type) throw new StoreError(400, "This activity is not a Secret Santa")
@@ -953,10 +1215,21 @@ export class Store {
         ...(noticeReason !== "withdrawn" ? { reason: noticeReason } : {}),
       })
     }
+    const emails = this.secretSantaEmails(activityId)
+    const archived = this.getSetting<Record<string, SantaArchived>>(`santa-archived:${activityId}`) ?? {}
+    for (const person of responses) {
+      if (!removedIds.has(person.userId)) continue
+      archived[person.userId] = {
+        name: person.userName,
+        email: emails.get(person.userId),
+        entry: person.response as SecretSantaEntry,
+        reason,
+        at: now,
+      }
+    }
     const removed = this.getSetting<Record<string, SantaRemoval>>(`santa-removed:${activityId}`) ?? {}
     if (reason === "unconfirmed") {
       const { config } = this.requireSecretSanta(activityId)
-      const emails = this.secretSantaEmails(activityId)
       const closesAt = confirmationClosesAt(config.confirmationDueAt)
       if (closesAt === null) throw new StoreError(409, "Manca la scadenza di conferma")
       for (const userId of userIds) {
@@ -981,6 +1254,7 @@ export class Store {
         this.setSetting(`santa-reassign:${activityId}`, notices)
       }
       if (reason === "unconfirmed") this.setSetting(`santa-removed:${activityId}`, removed)
+      this.setSetting(`santa-archived:${activityId}`, archived)
       if (gadget)
         this.setSetting(`santa-gadget:${activityId}`, {
           ...gadget,
@@ -1028,7 +1302,15 @@ export class Store {
       hasEmail: Boolean(this.secretSantaEmails(activity.id).get(userId)),
       entry: mine?.response ?? null,
       match: receiver
-        ? { name: receiver.userName, likes: receiver.response.likes, dislikes: receiver.response.dislikes }
+        ? {
+            name: receiver.userName,
+            likes: receiver.response.likes,
+            dislikes: receiver.response.dislikes,
+            editedAt:
+              this.getSetting<Record<string, number>>(`santa-letter-edited:${activity.id}`)?.[
+                receiver.userId
+              ] ?? null,
+          }
         : null,
       gadgetWon: null,
       giftConfirmedAt:
@@ -1221,7 +1503,7 @@ export class Store {
   }
 
   private deleteSecretSantaDraws(activityId: string) {
-    for (const key of ["confirmed", "warnings", "removed"])
+    for (const key of ["confirmed", "warnings", "removed", "archived", "letter-edited"])
       this.db.prepare("DELETE FROM settings WHERE key = ?").run(`santa-${key}:${activityId}`)
     this.db.prepare("DELETE FROM settings WHERE key = ?").run(`santa-reassign:${activityId}`)
     this.db.prepare("DELETE FROM settings WHERE key = ?").run(`santa-mail:${activityId}`)
@@ -1320,4 +1602,60 @@ function toActivity(row: ActivityRow): Activity {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
+}
+
+const LEAVE_LABELS: Record<SantaLeaveReason, string> = {
+  withdrawn: "Ritirato",
+  unconfirmed: "Non confermato",
+  admin: "Rimosso",
+}
+
+/**
+ * One audit change per letter field that differs; `before` is null when the old letter is unknown.
+ * The audit history outlives a reset, so it never keeps the letter text, only that it changed.
+ */
+function entryChanges(
+  userId: string,
+  name: string,
+  before: SecretSantaEntry | null,
+  after: SecretSantaEntry,
+): SantaAdminChange[] {
+  const yesNo = (value: boolean) => (value ? "Sì" : "No")
+  const text = (value: string, label: string) => (value.trim() ? label : "Vuoto")
+  const changes: SantaAdminChange[] = []
+  for (const [field, key] of [
+    ["Cose che ama", "likes"],
+    ["Meglio di no", "dislikes"],
+  ] as const)
+    if (before?.[key] !== after[key])
+      changes.push({
+        userId,
+        name,
+        field,
+        before: before ? text(before[key], "Testo precedente") : null,
+        after: text(after[key], "Testo aggiornato"),
+      })
+  if (before?.gadget !== after.gadget)
+    changes.push({
+      userId,
+      name,
+      field: "Adesione gadget",
+      before: before ? yesNo(before.gadget) : null,
+      after: yesNo(after.gadget),
+    })
+  return changes
+}
+
+/** Whether `assignments` takes everybody in `ids` around one cycle, nobody to themselves. */
+function isSingleCycle(ids: string[], assignments: Record<string, string | null>) {
+  if (ids.length < 2) return ids.every((id) => assignments[id] === null)
+  const seen = new Set<string>()
+  let current = ids[0] as string
+  while (!seen.has(current)) {
+    seen.add(current)
+    const next = assignments[current]
+    if (!next || next === current || !ids.includes(next)) return false
+    current = next
+  }
+  return seen.size === ids.length && current === ids[0]
 }

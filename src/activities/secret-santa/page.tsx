@@ -518,8 +518,14 @@ function Hero({ santa, now }: { santa: SecretSantaView; now: number }) {
           className="mx-auto grid max-w-md gap-px overflow-hidden rounded-2xl border text-left text-sm shadow-sm sm:grid-cols-2"
           style={{ borderColor: XMAS.frost, background: XMAS.frost }}
         >
-          {details.map((item) => (
-            <div key={item.label} className="flex items-start gap-3 bg-white/90 px-4 py-3">
+          {details.map((item, index) => (
+            <div
+              key={item.label}
+              // An odd last card spans both columns, so the grid never ends with an empty cell.
+              className={`flex items-start gap-3 bg-white/90 px-4 py-3 ${
+                details.length % 2 === 1 && index === details.length - 1 ? "sm:col-span-2" : ""
+              }`}
+            >
               <span
                 className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full"
                 style={{ background: XMAS.ice, color: XMAS.blue }}
@@ -1260,6 +1266,11 @@ function Reveal({
             <TagLine icon="ban" label="Meglio di no">
               {match.dislikes}
             </TagLine>
+          )}
+          {match.editedAt != null && (
+            <p className="text-xs" style={{ color: XMAS.muted }}>
+              Letterina aggiornata dagli organizzatori il {formatWhen(new Date(match.editedAt).toISOString())}
+            </p>
           )}
         </div>
         <p className="mt-5 text-center text-sm" style={{ color: XMAS.muted }}>

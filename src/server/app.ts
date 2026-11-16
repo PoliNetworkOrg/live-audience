@@ -33,6 +33,12 @@ const santaAssignments = santaAdminEdit.extend({
   assignments: z.record(z.string().min(1).max(200), z.string().min(1).max(200).nullable()),
 })
 const santaConfirmation = santaAdminEdit.extend({ confirmed: z.boolean() })
+/** The letter itself is validated by the store against the activity's response schema. */
+const santaEntryEdit = santaAdminEdit.extend({ entry: z.unknown() })
+const santaReadmission = santaEntryEdit.extend({
+  giverId: z.string().min(1).max(200).nullable().optional(),
+  confirmed: z.boolean().default(false),
+})
 const santaRemoval = z.object({
   reason: z.string().trim().min(1).max(500).default("Rimozione dagli organizzatori"),
   revision: z
@@ -237,6 +243,26 @@ export function createApp({ store, session }: { store: Store; session: Middlewar
           c.req.param("userId"),
           c.get("user") as SessionUser,
           await parseBody(c, santaConfirmation),
+        ),
+      ),
+    )
+    .post("/secret-santa/:id/participants/:userId/readmit", async (c) =>
+      c.json(
+        store.readmitSecretSantaParticipant(
+          c.req.param("id"),
+          c.req.param("userId"),
+          c.get("user") as SessionUser,
+          await parseBody(c, santaReadmission),
+        ),
+      ),
+    )
+    .patch("/secret-santa/:id/participants/:userId/entry", async (c) =>
+      c.json(
+        store.updateSecretSantaEntry(
+          c.req.param("id"),
+          c.req.param("userId"),
+          c.get("user") as SessionUser,
+          await parseBody(c, santaEntryEdit),
         ),
       ),
     )

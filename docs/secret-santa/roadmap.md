@@ -22,7 +22,7 @@ prima di abilitare una scadenza di conferma in produzione. In locale rimane il m
 2. Correzione atomica del ciclo e delle conferme, revisioni per concorrenza e cronologia degli interventi.
 3. Pannello operativo con ricerca, filtri, anteprima e motivo delle correzioni.
 4. Notifica degli interventi degli organizzatori, test API/UI e commit locali.
-5. Riammissione e correzione letterine: in attesa della scelta di prodotto.
+5. Riammissione e correzione letterine: server completato; interfaccia del pannello e del cartellino in corso.
 
 Passi 1–4 completati: API riservate agli admin, correzioni atomiche con revisione e cronologia,
 pannello a larghezza piena e notifiche dedicate alle correzioni degli organizzatori. Live:
@@ -30,3 +30,15 @@ typecheck, Biome, 78 test e build superati. Backend: typecheck, controlli sui fi
 358 test e build superati; 11 integrazioni opzionali non abilitate. Verifica Chromium con API
 simulate a 390 e 1280 px per filtri, conferme, anteprima del ciclo, salvataggio, cronologia,
 concorrenza e conservazione delle bozze in caso di errore. Nessuna email reale inviata.
+
+Passo 5, lato server: archivio degli ex partecipanti, vista admin con `formerParticipants`, riammissione e
+correzione letterine con revisione, motivo, cronologia e notifiche; rotte admin dedicate. Live (Node 22):
+typecheck, Biome, 92 test (14 nuovi sulla riammissione e sulle letterine) e build superati. Interfaccia
+(`admin.tsx`, `page.tsx`) e verifica nel browser ancora da fare. Nessuna email reale inviata.
+
+Correzioni dopo la revisione: conferma anche del donatore che non aveva nessuno quando la riammissione
+avviene dopo la scadenza (test con il job della mezzanotte), 404 per id come `constructor`/`__proto__`,
+cronologia senza testo delle letterine; nel pannello la correzione della letterina conserva la bozza
+quando cambiano altri dati, casella del gadget solo se il gadget è attivo, testi senza email, regioni
+live sempre presenti, focus restituito alla chiusura e avviso quando il modulo aperto non è più valido.
+Live (Node 22): typecheck, Biome, 94 test e build superati; verifica nel browser non eseguita.

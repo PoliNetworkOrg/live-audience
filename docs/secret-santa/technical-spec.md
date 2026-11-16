@@ -26,3 +26,41 @@ Una migrazione aggiunge la cronologia degli interventi manuali, privata e legata
 nuovo pacchetto o servizio. La mail di riassegnazione aggiunge il motivo `admin`. Test: permessi e assenza
 di dati privati nelle altre API; modifiche valide/invalide e concorrenti; conferme mantenute; notifiche
 solo per i destinatari effettivamente cambiati; cronologia persistente e accessibile solo agli admin.
+
+## Riammissione e correzione letterine
+
+Nessuna migrazione SQL: lo stato vive in settings. `santa-archived:<id>` è una mappa
+userId → `{ name, email?, entry, reason: "withdrawn" | "unconfirmed" | "admin", at }`, scritta da
+`removeSecretSantaEntries` nella stessa transazione della rimozione, per ogni motivo e prima o dopo il
+sorteggio. `joinSecretSanta` la cancella per chi si reiscrive (stessa transazione), il reset/eliminazione
+(`deleteSecretSantaDraws`) la svuota, `undoSecretSantaDraw` la conserva. I vecchi record `santa-removed`
+senza letterina compaiono con `entry: null`. `santa-letter-edited:<id>` (userId → istante) è svuotato da
+reset e annullamento del sorteggio.
+
+La vista admin aggiunge `formerParticipants` (unione di archivio e `santa-removed`, esclusi gli attivi,
+dal più recente) e `counters.former`; la revisione copre anche archivio e correzioni delle letterine.
+
+`POST /api/admin/secret-santa/:id/participants/:userId/readmit` (`readmitSecretSantaParticipant`) e
+`PATCH /api/admin/secret-santa/:id/participants/:userId/entry` (`updateSecretSantaEntry`) richiedono
+revisione e motivo come le altre correzioni e restituiscono la vista admin. La riammissione dopo il
+sorteggio inserisce la persona dopo il donatore scelto e verifica che il risultato sia un unico ciclo
+senza autoassegnazioni; le notifiche riusano `santa-reassign` con motivo `admin` e le regole di
+deduplicazione delle correzioni degli abbinamenti. Tutte le scritture e la riga di cronologia
+(«Riammissione», «Letterina») sono in un'unica transazione. La vista del partecipante espone
+`match.editedAt` solo per il proprio destinatario.
+
+Dopo la scadenza, se il donatore scelto non aveva nessuno (riceve un destinatario con la riammissione e
+non poteva aver confermato), `confirmed: true` registra in `santa-confirmed` anche lui, con una riga
+«Conferma regalo» in più; altrimenti il job della mezzanotte lo rimuoverebbe. Archivio e rimozioni sono
+oggetti letti da JSON: le ricerche per `:userId` usano `Object.hasOwn`, così chiavi ereditate come
+`constructor` o `__proto__` restituiscono 404. Dati personali nella cronologia
+(`secret_santa_admin_actions`, persistente e non svuotata dal reset): nome di chi agisce, nomi dei
+partecipanti coinvolti, motivo, abbinamenti, stato della conferma e adesione al gadget. Il testo delle
+letterine non viene mai salvato: le righe «Cose che ama»/«Meglio di no» riportano solo «Testo
+precedente», «Testo aggiornato» o «Vuoto».
+
+Test (`tests/secret-santa-admin.test.ts`): archivio per ogni motivo, pulizia con reiscrizione/reset e non
+con annullamento; riammissione prima del sorteggio, dopo con donatore normale, senza destinatario e
+senza attivi; ciclo unico; scadenza; conferme; notifiche e mail del sorteggio con mailer simulato;
+record legacy; permessi, revisioni superate, 404/409; rollback; correzioni con cronologia, no-op,
+`editedAt` visibile solo al donatore e assenza di dati privati nelle API delle presentazioni.

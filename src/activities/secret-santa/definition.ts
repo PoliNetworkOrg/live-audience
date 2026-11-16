@@ -79,8 +79,11 @@ export interface SecretSantaView {
   /** False when the IdP gave no email for this person: they would miss the draw email. */
   hasEmail: boolean
   entry: SecretSantaEntry | null
-  /** Who this person gives a gift to, once drawn. */
-  match: { name: string; likes: string; dislikes: string } | null
+  /**
+   * Who this person gives a gift to, once drawn. `editedAt` is when the organizers last corrected
+   * that person's letter after the draw (null when they never did).
+   */
+  match: { name: string; likes: string; dislikes: string; editedAt?: number | null } | null
   /** Always null while gadget extraction is paused. */
   gadgetWon: boolean | null
   giftConfirmedAt: number | null

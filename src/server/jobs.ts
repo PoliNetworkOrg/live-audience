@@ -25,7 +25,7 @@ export const logMailer: Mailer = {
   },
   async sendSecretSantaReassigned(mail) {
     console.log(
-      `[mail] Secret Santa reassignment email to ${mail.to} (${mail.name}): ${mail.withdrawnName} withdrew, new match: ${mail.hasNewMatch} ${mail.url}`,
+      `[mail] Secret Santa reassignment email to ${mail.to} (${mail.name}): ${mail.reason === "admin" ? "organizer change" : `${mail.withdrawnName} left (${mail.reason ?? "withdrawn"})`}, new match: ${mail.hasNewMatch} ${mail.url}`,
     )
   },
 }
