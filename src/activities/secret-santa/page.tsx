@@ -372,7 +372,7 @@ function SantaExperience({
 
   return (
     <article aria-labelledby={`santa-${santa.id}`} className="space-y-10">
-      <Hero santa={santa} now={now} />
+      <Hero santa={santa} now={now} canJoin={canJoin} />
       <Steps santa={santa} />
       {!santa.drawn && <Countdown santa={santa} now={now} canJoin={canJoin} />}
       {body}
@@ -689,15 +689,30 @@ function daysToChristmas(now: Date) {
   return Math.round((Date.UTC(now.getFullYear(), 11, 25) - today) / 86_400_000)
 }
 
-function Hero({ santa, now }: { santa: SecretSantaView; now: number }) {
+/**
+ * The line under the title follows the phase: the invitation while sign-ups are open, then news.
+ * People left out once sign-ups close get none: the card below explains.
+ */
+function heroIntro(santa: SecretSantaView, canJoin: boolean) {
+  if (santa.drawn)
+    return santa.entry
+      ? "L'estrazione è fatta! Scopri a chi fare il regalo e preparagli una bella sorpresa."
+      : ""
+  if (!canJoin) return santa.entry ? "Iscrizioni chiuse: gli elfi stanno preparando l'estrazione." : ""
+  return "Iscriviti, raccontaci cosa ti piace e riceverai una persona da sorprendere con un piccolo regalo."
+}
+
+function Hero({ santa, now, canJoin }: { santa: SecretSantaView; now: number; canJoin: boolean }) {
   const days = daysToChristmas(new Date(now))
   const { config } = santa
+  const intro = heroIntro(santa, canJoin)
   const details = [
-    config.signupsCloseAt && {
-      icon: "mail",
-      label: "Iscrizioni fino a",
-      value: formatWhen(config.signupsCloseAt),
-    },
+    canJoin &&
+      config.signupsCloseAt && {
+        icon: "mail",
+        label: "Iscrizioni fino a",
+        value: formatWhen(config.signupsCloseAt),
+      },
     config.drawAt && { icon: "shuffle", label: "Estrazione", value: formatWhen(config.drawAt) },
     config.exchange && { icon: "gift", label: "Scambio dei regali", value: config.exchange },
     config.budget && { icon: "coins", label: "Budget", value: config.budget },
@@ -732,12 +747,12 @@ function Hero({ santa, now }: { santa: SecretSantaView; now: number }) {
                 : `Mancano ${days} giorni a Natale`}
           </p>
         )}
-        {config.intro && (
+        {intro && (
           <p
             className="mx-auto max-w-md rounded-2xl border border-sky-200 bg-white px-4 py-3 leading-relaxed text-pretty shadow-sm"
             style={{ color: XMAS.muted }}
           >
-            {config.intro}
+            {intro}
           </p>
         )}
       </div>

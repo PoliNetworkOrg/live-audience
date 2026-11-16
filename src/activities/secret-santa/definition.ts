@@ -24,7 +24,6 @@ const configSchema = z
     drawAt: instant,
     /** Last reminder; confirmations close at the following midnight in Europe/Rome. */
     confirmationDueAt: instant.default(""),
-    intro: text(600),
     /** Where and when gifts are handed over in person. */
     exchange: text(200),
     budget: text(60),
@@ -192,8 +191,6 @@ export const secretSanta = defineActivity<SecretSantaConfig, SecretSantaEntry, S
     signupsCloseAt: "",
     drawAt: "",
     confirmationDueAt: "",
-    intro:
-      "Iscriviti, raccontaci cosa ti piace e riceverai una persona da sorprendere con un piccolo regalo.",
     exchange: "",
     budget: "",
     gadget: { enabled: true, winners: 1 },
