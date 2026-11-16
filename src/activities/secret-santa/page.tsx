@@ -150,7 +150,7 @@ function SignedOut() {
   return (
     <div className="xmas-rise space-y-4 text-center sm:space-y-6">
       <SantaLogo className="mx-auto h-32 w-auto sm:h-52" />
-      <div className="space-y-4 rounded-3xl bg-sky-50 px-4 py-5 sm:bg-transparent sm:p-0 sm:space-y-6">
+      <div className="space-y-4 sm:space-y-6">
         <Eyebrow>Secret Santa</Eyebrow>
         <h1 className="text-3xl font-semibold tracking-tight text-balance sm:text-5xl">
           Qualcuno in PoliNetwork ha un regalo per te
@@ -700,7 +700,7 @@ function Hero({ santa, now }: { santa: SecretSantaView; now: number }) {
   return (
     <section className="xmas-rise space-y-5 text-center">
       <SantaLogo className="mx-auto h-32 w-auto sm:h-52" />
-      <div className="space-y-5 rounded-3xl bg-sky-50 px-4 py-5 sm:bg-transparent sm:p-0">
+      <div className="space-y-5">
         <Eyebrow>Secret Santa PoliNetwork</Eyebrow>
         <h1
           id={`santa-${santa.id}`}

@@ -18,7 +18,7 @@ export const XMAS = {
   frost: "oklch(90% 0.04 240)",
   ice: "oklch(97% 0.015 240)",
   white: "oklch(100% 0 0)",
-  muted: "oklch(40% 0.04 252)",
+  muted: "oklch(35% 0.04 252)",
   // …and Christmas gold, red and green are the accents.
   gold: "oklch(83% 0.14 85)",
   goldDark: "oklch(70% 0.14 75)",
