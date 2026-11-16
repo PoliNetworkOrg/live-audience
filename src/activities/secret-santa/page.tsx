@@ -34,6 +34,8 @@ import {
 export const SECRET_SANTA_PATH = "/secret-santa"
 const PAPER = XMAS.white
 const INK = XMAS.navy
+const SECONDARY_ACTION =
+  "inline-flex min-h-11 items-center justify-center rounded-full border border-slate-300 bg-white px-5 py-2.5 text-sm font-semibold shadow-sm transition-colors hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-blue-600 disabled:cursor-not-allowed disabled:opacity-60"
 
 /** The current time, refreshed every `intervalMs`. */
 function useNow(intervalMs = 1000) {
@@ -140,7 +142,10 @@ function SignedOut() {
         <h1 className="text-3xl font-semibold tracking-tight text-balance sm:text-5xl">
           Qualcuno in PoliNetwork ha un regalo per te
         </h1>
-        <p className="leading-relaxed text-pretty" style={{ color: XMAS.muted }}>
+        <p
+          className="rounded-2xl border border-sky-200 bg-white px-4 py-3 leading-relaxed text-pretty shadow-sm"
+          style={{ color: XMAS.muted }}
+        >
           Accedi con il tuo account PoliNetwork per scrivere la tua letterina e scoprire chi devi sorprendere.
         </p>
       </div>
@@ -164,7 +169,7 @@ function SecretSantas() {
         <p role="alert" className="text-rose-700">
           {list.error.message}
         </p>
-        <button type="button" onClick={list.reload} className="underline">
+        <button type="button" onClick={list.reload} className={SECONDARY_ACTION}>
           Riprova
         </button>
       </div>
@@ -177,7 +182,7 @@ function SecretSantas() {
         <p style={{ color: XMAS.muted }}>
           Gli elfi stanno ancora preparando tutto. Torna più vicino a Natale!
         </p>
-        <Link href="/" className="inline-block text-sm underline" style={{ color: XMAS.blue }}>
+        <Link href="/" className={SECONDARY_ACTION} style={{ color: XMAS.blue }}>
           Torna a PoliNetwork Live
         </Link>
       </div>
@@ -378,12 +383,12 @@ function SantaExperience({
         </p>
       )}
       {entry && !editing && (
-        <div className="flex justify-center gap-6 text-sm">
+        <div className="flex flex-wrap justify-center gap-3 text-sm">
           {!santa.drawn && (
             <button
               type="button"
               onClick={() => setEditing(true)}
-              className="underline underline-offset-4"
+              className={SECONDARY_ACTION}
               style={{ color: XMAS.blue }}
             >
               Modifica la letterina
@@ -396,8 +401,8 @@ function SantaExperience({
               withdrawalDialog.current?.showModal()
               withdrawalCancel.current?.focus()
             }}
-            className="underline underline-offset-4"
-            style={{ color: XMAS.muted }}
+            className={SECONDARY_ACTION}
+            style={{ color: XMAS.redDark, borderColor: XMAS.redDark }}
           >
             Ritirati
           </button>
@@ -707,7 +712,10 @@ function Hero({ santa, now }: { santa: SecretSantaView; now: number }) {
           </p>
         )}
         {config.intro && (
-          <p className="mx-auto max-w-md leading-relaxed text-pretty" style={{ color: XMAS.muted }}>
+          <p
+            className="mx-auto max-w-md rounded-2xl border border-sky-200 bg-white px-4 py-3 leading-relaxed text-pretty shadow-sm"
+            style={{ color: XMAS.muted }}
+          >
             {config.intro}
           </p>
         )}
@@ -1015,7 +1023,7 @@ function Letter({
             <button
               type="button"
               onClick={onCancel}
-              className="px-3 text-sm underline"
+              className={SECONDARY_ACTION}
               style={{ color: XMAS.muted }}
             >
               Annulla
@@ -1102,7 +1110,7 @@ function SendingLetter({ onDelivered }: { onDelivered: () => void }) {
       <button
         type="button"
         onClick={onDelivered}
-        className="mt-3 min-h-11 px-4 text-sm underline underline-offset-4"
+        className={`mt-3 ${SECONDARY_ACTION}`}
         style={{ color: XMAS.blue }}
       >
         Salta l'animazione
@@ -1554,7 +1562,7 @@ function Reveal({
           setCelebrate(false)
           setStage("sealed")
         }}
-        className="mx-auto mt-5 block min-h-11 px-4 text-sm underline underline-offset-4"
+        className={`mx-auto mt-5 flex w-fit ${SECONDARY_ACTION}`}
         style={{ color: XMAS.blue }}
       >
         Rivedi l'apertura
