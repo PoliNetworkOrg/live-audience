@@ -78,6 +78,9 @@ export interface AudienceLeaderboard {
 
 export type StageStatus = "open" | "closed"
 
+/** The audience page's look, a global setting. */
+export type Theme = "default" | "christmas"
+
 /** The single global "what is happening right now". Only one presentation exists at a time. */
 export interface Stage {
   activityId: string | null
@@ -2007,6 +2010,18 @@ export class Store {
     const key = `la_${randomBytes(24).toString("base64url")}`
     this.setSetting("apiKey", key)
     return key
+  }
+
+  // ---- theme -----------------------------------------------------------------------------
+
+  /** The look of the audience page, switched by the admins: "default" or "christmas". */
+  getTheme(): Theme {
+    return this.getSetting<Theme>("theme") === "christmas" ? "christmas" : "default"
+  }
+
+  setTheme(theme: Theme): Theme {
+    this.setSetting("theme", theme)
+    return theme
   }
 
   // ---- settings --------------------------------------------------------------------------

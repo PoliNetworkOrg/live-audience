@@ -36,6 +36,7 @@ const presentationBody = z.object({
   title: z.string().trim().min(1).max(200),
   slug: z.string().trim().min(1).max(80),
 })
+const themeBody = z.object({ christmas: z.boolean() })
 const respondBody = z.object({ activityId: z.string(), response: z.unknown() })
 const santaAdminEdit = z.object({
   revision: z.string().regex(/^[a-f0-9]{64}$/),
@@ -221,6 +222,9 @@ export function createApp({ store, session }: { store: Store; session: Middlewar
 
   app.get("/api/me", (c) => c.json({ user: c.get("user") }))
 
+  // Public: the sign-in screen is themed too.
+  app.get("/api/theme", (c) => c.json({ christmas: store.getTheme() === "christmas" }))
+
   // Anyone with a PoliNetwork account may play; activities marked members only take Soci alone.
   const audience = new Hono<AppEnv>()
     .use(requireUser(() => true))
@@ -392,6 +396,10 @@ export function createApp({ store, session }: { store: Store; session: Middlewar
         ),
       ),
     )
+    .put("/theme", async (c) => {
+      const body = await parseBody(c, themeBody)
+      return c.json({ christmas: store.setTheme(body.christmas ? "christmas" : "default") === "christmas" })
+    })
     .get("/api-key", (c) => c.json({ apiKey: store.getApiKey() }))
     .post("/api-key", (c) => c.json({ apiKey: store.regenerateApiKey() }))
     .route("/", control)

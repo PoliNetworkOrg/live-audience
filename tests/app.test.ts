@@ -18,6 +18,7 @@ const session: MiddlewareHandler<{ Variables: AuthVariables }> = async (c, next)
 }
 
 let store: Store
+let storeDb: ReturnType<typeof openDatabase>
 let app: ReturnType<typeof createApp>
 
 function call(path: string, init: { as?: string; key?: string; method?: string; body?: unknown } = {}) {
@@ -57,7 +58,8 @@ async function createPoll() {
 }
 
 beforeEach(() => {
-  store = new Store(openDatabase(":memory:"))
+  storeDb = openDatabase(":memory:")
+  store = new Store(storeDb)
   app = createApp({ store, session })
 })
 
@@ -201,6 +203,45 @@ describe("access", () => {
     expect((await call(`/api/v1/stage?key=${key}`)).status).toBe(200)
     store.regenerateApiKey()
     expect((await call("/api/v1/stage", { key })).status).toBe(401)
+  })
+})
+
+describe("the audience theme", () => {
+  const read = async (as?: string) => {
+    const res = await call("/api/theme", { as })
+    expect(res.status).toBe(200)
+    return res.json()
+  }
+  const put = (body: unknown, as?: string) => call("/api/admin/theme", { as, method: "PUT", body })
+
+  it("is off by default and public to read, signed in or not", async () => {
+    expect(await read()).toEqual({ christmas: false })
+    expect(await read("guest")).toEqual({ christmas: false })
+    expect(await read("admin")).toEqual({ christmas: false })
+  })
+
+  it("can only be changed by admins, with a valid body", async () => {
+    expect((await put({ christmas: true })).status).toBe(401)
+    expect((await put({ christmas: true }, "socio")).status).toBe(403)
+    expect((await put({ christmas: true }, "guest")).status).toBe(403)
+    expect((await put({ christmas: "yes" }, "admin")).status).toBe(400)
+    expect((await put({}, "admin")).status).toBe(400)
+    expect(await read()).toEqual({ christmas: false })
+  })
+
+  it("is switched by an admin, seen by everyone and persisted", async () => {
+    const on = await put({ christmas: true }, "admin")
+    expect(on.status).toBe(200)
+    expect(await on.json()).toEqual({ christmas: true })
+    expect(await read()).toEqual({ christmas: true })
+    expect(await read("socio")).toEqual({ christmas: true })
+
+    // Survives a restart: a new store and app over the same database read it back.
+    app = createApp({ store: new Store(storeDb), session })
+    expect(await read()).toEqual({ christmas: true })
+
+    expect(await (await put({ christmas: false }, "admin")).json()).toEqual({ christmas: false })
+    expect(await read()).toEqual({ christmas: false })
   })
 })
 

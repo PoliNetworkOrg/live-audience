@@ -1059,6 +1059,59 @@
   --r: 35deg;
 }
 
+/* Wrapping the present when someone confirms their gift: lid down, ribbon on, bow, check. */
+@keyframes xmas-gift-lid {
+  from {
+    transform: translate(2px, -14px) rotate(-12deg);
+  }
+  70% {
+    transform: translateY(2px);
+  }
+  to {
+    transform: none;
+  }
+}
+@keyframes xmas-gift-ribbon {
+  from {
+    transform: scaleY(0);
+  }
+  to {
+    transform: none;
+  }
+}
+@keyframes xmas-gift-bow {
+  0% {
+    transform: scale(0) rotate(-30deg);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.15) rotate(6deg);
+    opacity: 1;
+  }
+  100% {
+    transform: none;
+    opacity: 1;
+  }
+}
+.xmas-gift-lid {
+  animation: xmas-gift-lid 450ms cubic-bezier(0.3, 0.7, 0.4, 1) both;
+}
+.xmas-gift-ribbon {
+  transform-box: fill-box;
+  transform-origin: top;
+  animation: xmas-gift-ribbon 320ms ease-out 260ms both;
+}
+.xmas-gift-bow {
+  transform-box: fill-box;
+  transform-origin: 50% 90%;
+  animation: xmas-gift-bow 450ms cubic-bezier(0.3, 1.4, 0.5, 1) 620ms both;
+}
+.xmas-gift-check {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: xmas-pop 350ms cubic-bezier(0.3, 1.4, 0.5, 1) 900ms both;
+}
+
 /* Reduced motion: decorations hold still, content just appears. */
 @media (prefers-reduced-motion: reduce) {
   .xmas-letter-beats,
@@ -1086,7 +1139,11 @@
   .xmas-send-flap,
   .xmas-send-flight,
   .xmas-post-elf,
-  .xmas-send-star {
+  .xmas-send-star,
+  .xmas-gift-lid,
+  .xmas-gift-ribbon,
+  .xmas-gift-bow,
+  .xmas-gift-check {
     animation: none;
   }
   .xmas-elf-a-path,

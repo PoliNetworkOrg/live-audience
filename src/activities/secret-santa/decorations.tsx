@@ -241,7 +241,8 @@ function Snowman({ className }: { className?: string }) {
 /** Where the decorated trees stand: left/right edge in %, how high up the snow (% of the scene), size. */
 const TREES = [
   { side: "left", at: 3, bottom: 30, size: "h-40 w-32 sm:h-56 sm:w-44" },
-  { side: "left", at: 13, bottom: 24, size: "h-28 w-22 sm:h-40 sm:w-32" },
+  // Hidden on phones: next to the big tree it would overlap it and the snowman.
+  { side: "left", at: 13, bottom: 24, size: "hidden sm:block sm:h-40 sm:w-32" },
   { side: "left", at: 26, bottom: 44, size: "hidden sm:block sm:h-24 sm:w-20" },
   { side: "right", at: 4, bottom: 34, size: "h-36 w-28 sm:h-52 sm:w-40" },
   { side: "right", at: 15, bottom: 26, size: "hidden sm:block sm:h-36 sm:w-28" },
@@ -277,7 +278,7 @@ export function SnowyHills() {
       >
         <path d="M0 300 C300 230 640 250 940 290 S1420 240 1600 270 V400 H0 Z" fill={XMAS.white} />
       </svg>
-      <Snowman className="absolute bottom-[14%] left-[22%] h-28 w-20 sm:h-36 sm:w-26" />
+      <Snowman className="absolute bottom-[12%] left-[44%] h-24 w-17 sm:bottom-[14%] sm:left-[22%] sm:h-36 sm:w-26" />
       {TREES.map((tree) => (
         <span
           key={`${tree.side}-${tree.at}`}
@@ -419,20 +420,138 @@ export function TreeIllustration({ className }: { className?: string }) {
   )
 }
 
-/** A present in PoliNetwork blue with a gold ribbon. */
-export function GiftBox({ className, color = XMAS.blue }: { className?: string; color?: string }) {
+/**
+ * How a GiftBox is wrapped: `tied` is the finished present; `open` has the lid ajar, tissue paper
+ * showing and the ribbon lying loose; `tying` is `tied` playing the wrap once (lid settles, ribbon
+ * runs down, bow pops). Under reduced motion `tying` simply shows the finished present.
+ */
+export type GiftWrap = "tied" | "open" | "tying"
+
+/** The lid's pose while the present is still open; xmas-gift-lid starts from the same pose. */
+const LID_AJAR: CSSProperties = {
+  transformBox: "view-box",
+  transformOrigin: "12px 54px",
+  transform: "translate(2px, -14px) rotate(-12deg)",
+}
+const LID_ORIGIN: CSSProperties = { transformBox: "view-box", transformOrigin: "12px 54px" }
+
+/** A present in PoliNetwork blue with a gold ribbon, optionally with a check badge on its corner. */
+export function GiftBox({
+  className,
+  color = XMAS.blue,
+  wrap = "tied",
+  checked = false,
+}: {
+  className?: string
+  color?: string
+  wrap?: GiftWrap
+  checked?: boolean
+}) {
+  const open = wrap === "open"
+  const tying = wrap === "tying"
   return (
-    <svg viewBox="0 0 120 120" className={className} aria-hidden>
+    <svg viewBox="0 0 120 120" className={className} aria-hidden overflow="visible">
       <ellipse cx="60" cy="112" rx="40" ry="5" fill={XMAS.navy} opacity="0.12" />
       <rect x="18" y="50" width="84" height="60" rx="6" fill={color} />
       <rect x="18" y="50" width="84" height="10" fill={XMAS.navy} opacity="0.15" />
-      <rect x="53" y="50" width="14" height="60" fill={XMAS.gold} />
-      <rect x="12" y="36" width="96" height="18" rx="5" fill={color} />
-      <rect x="12" y="36" width="96" height="18" rx="5" fill="white" opacity="0.15" />
-      <rect x="53" y="36" width="14" height="18" fill={XMAS.gold} />
-      <path d="M60 36 C46 14 22 22 34 32 C39 36 52 37 60 36 Z" fill={XMAS.gold} />
-      <path d="M60 36 C74 14 98 22 86 32 C81 36 68 37 60 36 Z" fill={XMAS.goldDark} />
-      <circle cx="60" cy="35" r="6" fill={XMAS.goldDark} />
+      {open ? (
+        <>
+          {/* Tissue paper peeking out, and the ribbon lying loose beside the box */}
+          <path
+            d="M24 52 L32 40 L42 50 L54 37 L64 49 L76 38 L86 50 L96 42 L98 52 Z"
+            fill={XMAS.white}
+            stroke={XMAS.sky}
+            strokeWidth="1.5"
+            strokeLinejoin="round"
+          />
+          <path
+            d="M84 113 C94 104 104 118 112 108 C116 102 110 96 104 101"
+            stroke={XMAS.gold}
+            strokeWidth="5"
+            strokeLinecap="round"
+            fill="none"
+          />
+          <path
+            d="M8 112 C14 104 24 116 34 110"
+            stroke={XMAS.goldDark}
+            strokeWidth="5"
+            strokeLinecap="round"
+            fill="none"
+          />
+        </>
+      ) : (
+        <rect
+          x="53"
+          y="50"
+          width="14"
+          height="60"
+          fill={XMAS.gold}
+          className={tying ? "xmas-gift-ribbon" : undefined}
+          style={tying ? { animationDelay: "380ms" } : undefined}
+        />
+      )}
+      <g className={tying ? "xmas-gift-lid" : undefined} style={open ? LID_AJAR : LID_ORIGIN}>
+        <rect x="12" y="36" width="96" height="18" rx="5" fill={color} />
+        <rect x="12" y="36" width="96" height="18" rx="5" fill="white" opacity="0.15" />
+        {!open && (
+          <rect
+            x="53"
+            y="36"
+            width="14"
+            height="18"
+            fill={XMAS.gold}
+            className={tying ? "xmas-gift-ribbon" : undefined}
+          />
+        )}
+      </g>
+      {!open && (
+        <g className={tying ? "xmas-gift-bow" : undefined}>
+          <path d="M60 36 C46 14 22 22 34 32 C39 36 52 37 60 36 Z" fill={XMAS.gold} />
+          <path d="M60 36 C74 14 98 22 86 32 C81 36 68 37 60 36 Z" fill={XMAS.goldDark} />
+          <circle cx="60" cy="35" r="6" fill={XMAS.goldDark} />
+        </g>
+      )}
+      {checked && (
+        <g className={tying ? "xmas-gift-check" : undefined}>
+          <circle cx="104" cy="50" r="13" fill={XMAS.pine} stroke={XMAS.white} strokeWidth="3" />
+          <path
+            d="M98 50.5 L102.5 55 L110.5 46"
+            stroke={XMAS.white}
+            strokeWidth="3"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            fill="none"
+          />
+        </g>
+      )}
+    </svg>
+  )
+}
+
+/** A small present with a big question mark: the secret gadget, never drawn as anything real. */
+export function MysteryGift({ className, muted = false }: { className?: string; muted?: boolean }) {
+  const box = muted ? XMAS.sky : XMAS.blue
+  return (
+    <svg viewBox="0 0 48 52" className={className} aria-hidden>
+      <ellipse cx="24" cy="49" rx="16" ry="2.5" fill={XMAS.navy} opacity="0.1" />
+      <rect x="7" y="21" width="34" height="27" rx="3.5" fill={box} />
+      <rect x="7" y="21" width="34" height="4" fill={XMAS.navy} opacity="0.12" />
+      <rect x="4" y="14" width="40" height="9" rx="3" fill={box} />
+      <rect x="4" y="14" width="40" height="9" rx="3" fill="white" opacity="0.15" />
+      <rect x="21" y="14" width="6" height="9" fill={muted ? XMAS.white : XMAS.gold} />
+      <path
+        d="M24 14 C18 4 8 8 13 12.5 C15 14 20 14.5 24 14 Z M24 14 C30 4 40 8 35 12.5 C33 14 28 14.5 24 14 Z"
+        fill={muted ? XMAS.white : XMAS.gold}
+      />
+      <circle cx="24" cy="13.5" r="2.6" fill={muted ? XMAS.frost : XMAS.goldDark} />
+      <path
+        d="M19.5 31 C19.5 27.5 22 26 24.2 26 C26.8 26 28.8 27.8 28.8 30.2 C28.8 33.6 24.3 33.4 24.3 37"
+        stroke={XMAS.white}
+        strokeWidth="3"
+        strokeLinecap="round"
+        fill="none"
+      />
+      <circle cx="24.3" cy="42" r="1.9" fill={XMAS.white} />
     </svg>
   )
 }

@@ -8,6 +8,7 @@ import {
   GiftBox,
   Icon,
   type IconName,
+  MysteryGift,
   Snowfall,
   SnowPuff,
   SnowyHills,
@@ -213,6 +214,20 @@ function SantaExperience({
   const [delivery, setDelivery] = useState<SecretSantaView | null>(null)
   const [error, setError] = useState<string | null>(null)
   const { config, entry } = santa
+  // Whether this browser has opened the golden letter for the current match (see Reveal). The gift
+  // confirmation only shows up after that; `letterOpenedNow` tells it to enter with a little delay.
+  const letterKey = santa.match ? openedLetterKey(santa.id, santa.match.name) : null
+  const [letter, setLetter] = useState(() => ({ key: letterKey, opened: readLetterOpened(letterKey) }))
+  const [letterOpenedNow, setLetterOpenedNow] = useState(false)
+  if (letter.key !== letterKey) {
+    setLetter({ key: letterKey, opened: readLetterOpened(letterKey) })
+    setLetterOpenedNow(false)
+  }
+  const onLetterOpened = () => {
+    if (letter.opened) return
+    setLetter({ key: letterKey, opened: true })
+    setLetterOpenedNow(true)
+  }
 
   const save = async (next: SecretSantaEntry) => {
     try {
@@ -260,7 +275,15 @@ function SantaExperience({
         <h2 className="text-2xl font-semibold">Sei stato rimosso da questo Secret Santa</h2>
         <p className="mt-3" style={{ color: XMAS.muted }}>
           Non hai confermato di aver preso il regalo entro la mezzanotte prevista. Gli abbinamenti sono stati
-          aggiornati e non puoi più partecipare a questo giro.
+          aggiornati. Se pensi che ci sia un errore o hai bisogno di aiuto, scrivi su Telegram a{" "}
+          <a className="font-semibold underline" href="https://t.me/bia3ia">
+            @bia3ia
+          </a>{" "}
+          o a{" "}
+          <a className="font-semibold underline" href="https://t.me/viganogabriele">
+            @viganogabriele
+          </a>
+          .
         </p>
       </Paper>
     )
@@ -288,8 +311,18 @@ function SantaExperience({
     )
   } else if (!santa.drawn) {
     body = <Waiting santa={santa} justJoined={justJoined} />
-  } else if (santa.match) {
-    body = <Reveal activityId={santa.id} match={santa.match} exchange={config.exchange} />
+  } else if (santa.match && letterKey) {
+    body = (
+      <Reveal
+        key={letterKey}
+        activityId={santa.id}
+        storageKey={letterKey}
+        initiallyOpen={letter.opened}
+        onOpened={onLetterOpened}
+        match={santa.match}
+        exchange={config.exchange}
+      />
+    )
   } else {
     body = (
       <Paper className="text-center">
@@ -307,8 +340,8 @@ function SantaExperience({
       <Steps santa={santa} />
       {!santa.drawn && <Countdown santa={santa} now={now} canJoin={canJoin} />}
       {body}
-      {entry && santa.drawn && santa.match && (
-        <GiftConfirmation santa={santa} now={now} onChange={onChange} />
+      {entry && santa.drawn && santa.match && letter.opened && (
+        <GiftConfirmation santa={santa} now={now} entering={letterOpenedNow} onChange={onChange} />
       )}
       {entry && !editing && !santa.hasEmail && !santa.drawn && (
         <Note>
@@ -352,23 +385,54 @@ function SantaExperience({
   )
 }
 
+/** Darker gold for text on light paper: XMAS.goldDark alone is too faint to read. */
+const GOLD_INK = "oklch(50% 0.11 70)"
+
+/** "il 14 dicembre alle 18:32" (with "l'8" and "l'11", and "il 1°"), Italian time. */
+function formatConfirmedAt(at: number) {
+  const date = new Date(at)
+  const day = Number(date.toLocaleDateString("it-IT", { timeZone: "Europe/Rome", day: "numeric" }))
+  const month = date.toLocaleDateString("it-IT", { timeZone: "Europe/Rome", month: "long" })
+  const time = date.toLocaleTimeString("it-IT", {
+    timeZone: "Europe/Rome",
+    hour: "2-digit",
+    minute: "2-digit",
+  })
+  const article = day === 8 || day === 11 ? "l'" : "il "
+  return `${article}${day === 1 ? "1°" : day} ${month} alle ${time}`
+}
+
+/**
+ * "Ho preso il regalo": an open present the participant taps to wrap it up. It shows up only once the
+ * golden letter has been opened (`entering` when that just happened). The confirmed state appears
+ * only after the server accepts it: the lid closes, the ribbon and bow go on, a gold stamp lands.
+ */
 function GiftConfirmation({
   santa,
   now,
+  entering,
   onChange,
 }: {
   santa: SecretSantaView
   now: number
+  entering: boolean
   onChange: (s: SecretSantaView) => void
 }) {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [justConfirmed, setJustConfirmed] = useState(false)
   const section = useRef<HTMLElement>(null)
+  const confirmedHeading = useRef<HTMLHeadingElement>(null)
+  const scrollOnMount = useRef(!entering)
   useEffect(() => {
-    if (window.location.hash === `#gift-confirmation-${santa.id}`)
+    // From the reminder email; not when it just appeared under the name the person is reading.
+    if (scrollOnMount.current && window.location.hash === `#gift-confirmation-${santa.id}`)
       section.current?.scrollIntoView({ block: "start" })
   }, [santa.id])
   const confirmed = santa.giftConfirmedAt !== null
+  useEffect(() => {
+    if (confirmed && justConfirmed) confirmedHeading.current?.focus({ preventScroll: true })
+  }, [confirmed, justConfirmed])
   const expired = santa.confirmationClosesAt !== null && now >= santa.confirmationClosesAt
   const confirm = async () => {
     if (saving || confirmed || expired) return
@@ -380,6 +444,7 @@ function GiftConfirmation({
           body: {},
         }),
       )
+      setJustConfirmed(true)
       setError(null)
     } catch (e) {
       setError(e instanceof Error ? e.message : "Conferma non riuscita. Riprova.")
@@ -387,42 +452,99 @@ function GiftConfirmation({
       setSaving(false)
     }
   }
+
   return (
     <section
       ref={section}
       id={`gift-confirmation-${santa.id}`}
-      className="scroll-mt-6 rounded-3xl border bg-white p-6 text-center shadow-sm"
-      style={{ borderColor: XMAS.frost }}
+      aria-labelledby={`gift-confirmation-title-${santa.id}`}
+      className="xmas-rise relative scroll-mt-6 rounded-3xl border bg-white px-5 py-7 text-center shadow-[0_20px_50px_oklch(35%_0.06_250/0.12)] sm:px-8"
+      style={{ borderColor: XMAS.frost, animationDelay: entering ? "650ms" : undefined }}
     >
-      <h2 aria-live="polite" className="text-xl font-semibold">
-        {confirmed ? "Il tuo regalo è pronto!" : "Hai preso il regalo?"}
-      </h2>
-      <p className="mt-2 text-sm" style={{ color: XMAS.muted }}>
-        {confirmed
-          ? "Conferma registrata. Portalo con te allo scambio dei regali. Se cambia il destinatario, la conferma resta valida."
-          : expired
-            ? "Il termine per confermare è scaduto. Stiamo aggiornando le partecipazioni."
-            : "Quando lo hai acquistato o preparato, confermalo qui. Non serve averlo già consegnato."}
-      </p>
-      {!confirmed && santa.config.confirmationDueAt && (
-        <p className="mt-3 text-sm" style={{ color: XMAS.blue }}>
-          Conferma entro {formatWhen(santa.config.confirmationDueAt)}. Ultima possibilità fino alle 23:59
-          dello stesso giorno, ora italiana; poi sarai rimosso e gli abbinamenti verranno aggiornati.
-        </p>
-      )}
-      {!confirmed && (
-        <button
-          type="button"
-          disabled={saving || expired}
-          onClick={() => void confirm()}
-          className="mt-4 min-h-12 rounded-full px-6 py-3 font-semibold text-white disabled:opacity-50"
-          style={{ background: XMAS.blue }}
-        >
-          {saving ? "Conferma in corso…" : "Ho preso il regalo"}
-        </button>
+      {confirmed ? (
+        <>
+          <div className="relative mx-auto size-40">
+            <GiftBox wrap={justConfirmed ? "tying" : "tied"} checked className="size-full" />
+            {justConfirmed && <Burst delay={1} />}
+            <span aria-hidden className="absolute inset-x-0 bottom-3 flex justify-center">
+              <span
+                className={`rounded-lg border-[3px] px-2.5 py-1 text-xs font-black tracking-[0.18em] whitespace-nowrap uppercase shadow-sm ${justConfirmed ? "xmas-stamp" : ""}`}
+                style={{
+                  borderColor: XMAS.goldDark,
+                  color: GOLD_INK,
+                  background: "oklch(98% 0.03 92)",
+                  transform: "rotate(-12deg)",
+                  animationDelay: justConfirmed ? "950ms" : undefined,
+                }}
+              >
+                Regalo pronto!
+              </span>
+            </span>
+          </div>
+          <h2
+            ref={confirmedHeading}
+            id={`gift-confirmation-title-${santa.id}`}
+            tabIndex={-1}
+            className="mt-4 text-2xl font-semibold tracking-tight outline-offset-4"
+          >
+            Il tuo regalo è pronto!
+          </h2>
+          {santa.giftConfirmedAt !== null && (
+            <p className="mt-1 font-medium" style={{ color: XMAS.blue }}>
+              Hai confermato {formatConfirmedAt(santa.giftConfirmedAt)}
+            </p>
+          )}
+        </>
+      ) : (
+        <>
+          <Eyebrow>Ultimo passo</Eyebrow>
+          <h2
+            id={`gift-confirmation-title-${santa.id}`}
+            className="mt-2 text-2xl font-semibold tracking-tight"
+          >
+            Hai preso il regalo?
+          </h2>
+          <p className="mx-auto mt-1 max-w-sm text-pretty" style={{ color: XMAS.muted }}>
+            {expired
+              ? "Il termine per confermare è scaduto. Stiamo aggiornando le partecipazioni."
+              : "Quando l'hai comprato o preparato, tocca il pacchetto per chiuderlo. Non serve averlo già consegnato."}
+          </p>
+          <button
+            type="button"
+            disabled={saving || expired}
+            aria-label={saving ? "Conferma in corso…" : "Conferma: ho preso il regalo"}
+            onClick={() => void confirm()}
+            className="group mx-auto mt-4 flex flex-col items-center gap-3 rounded-3xl px-4 pt-2 pb-4 outline-none focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-blue-500 disabled:cursor-not-allowed"
+          >
+            <span
+              className={`block size-40 transition-transform duration-200 ease-out motion-safe:group-hover:-translate-y-1 motion-safe:group-active:scale-[0.97] group-disabled:translate-y-0 ${saving || expired ? "opacity-60" : ""}`}
+            >
+              <GiftBox wrap="open" className={`size-full ${saving || expired ? "" : "xmas-wobble"}`} />
+            </span>
+            <span
+              className="inline-flex min-h-11 items-center gap-2 rounded-full px-5 py-2.5 font-semibold text-white shadow-md transition group-disabled:shadow-none"
+              style={{ background: saving || expired ? "oklch(72% 0.05 250)" : XMAS.blue }}
+            >
+              <Icon name="gift" className="size-5" />
+              {saving ? "Conferma in corso…" : "Ho preso il regalo"}
+            </span>
+          </button>
+          {!expired && santa.config.confirmationDueAt && (
+            <p className="mx-auto mt-3 max-w-sm text-sm text-pretty" style={{ color: XMAS.muted }}>
+              Conferma entro{" "}
+              <b className="font-semibold" style={{ color: XMAS.navy }}>
+                {formatWhen(santa.config.confirmationDueAt)}
+              </b>
+              . Hai tempo fino a mezzanotte dello stesso giorno.
+            </p>
+          )}
+        </>
       )}
       {error && (
-        <p role="alert" className="mt-3 text-sm text-rose-700">
+        <p
+          role="alert"
+          className="mt-4 rounded-2xl bg-rose-50 px-4 py-3 text-sm text-rose-800 ring-1 ring-rose-200"
+        >
           {error}
         </p>
       )}
@@ -756,25 +878,50 @@ function Letter({
           />
         </label>
         {config.gadget.enabled && (
-          <label
-            className="flex cursor-pointer items-start gap-3 rounded-2xl border p-3.5 text-sm"
-            style={{ borderColor: XMAS.frost, background: XMAS.ice }}
-          >
+          <label className={`block text-left ${gadgetLocked ? "cursor-not-allowed" : "cursor-pointer"}`}>
             <input
               type="checkbox"
               checked={gadget}
               disabled={gadgetLocked}
               onChange={(e) => setGadget(e.target.checked)}
-              className="mt-0.5 size-5 shrink-0"
-              style={{ accentColor: XMAS.blue }}
+              className="peer sr-only"
             />
-            <span>
-              Mi iscrivo anche per <b>{GADGET_NAME}</b>
-              <span className="block" style={{ color: XMAS.muted }}>
-                Per ora raccogliamo solo le adesioni. La sorpresa arriverà più avanti.
+            <Ticket
+              gold={gadget}
+              className="transition-transform duration-150 ease-out peer-focus-visible:outline-2 peer-focus-visible:outline-offset-4 peer-focus-visible:outline-blue-500 peer-disabled:opacity-75 motion-safe:active:scale-[0.98] motion-safe:peer-disabled:active:scale-100"
+              stub={<MysteryGift muted={!gadget} className="h-12 w-11" />}
+            >
+              <span className="flex items-start gap-3">
+                <span className="min-w-0 flex-1">
+                  <span
+                    aria-hidden
+                    className="block text-[11px] font-bold tracking-[0.2em] uppercase"
+                    style={{ color: gadget ? GOLD_INK : XMAS.blue }}
+                  >
+                    Biglietto speciale
+                  </span>
+                  <span className="mt-0.5 block font-semibold">
+                    Partecipo anche all'estrazione di {GADGET_NAME}
+                  </span>
+                  <span className="mt-0.5 block text-sm" style={{ color: XMAS.muted }}>
+                    {gadgetLocked
+                      ? "L'estrazione del gadget è già stata fatta: questa scelta non si può più cambiare."
+                      : "Cos'è? Sorpresa. Per ora raccogliamo solo le adesioni."}
+                  </span>
+                </span>
+                <span
+                  aria-hidden
+                  className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full border-2"
+                  style={
+                    gadget
+                      ? { background: XMAS.blue, borderColor: XMAS.blue, color: XMAS.white }
+                      : { borderColor: XMAS.sky, borderStyle: "dashed", background: XMAS.white }
+                  }
+                >
+                  {gadget && <Icon name="check" className="xmas-pop size-4" />}
+                </span>
               </span>
-            </span>
-            <Icon name="ticket" className="ml-auto size-5 shrink-0 text-amber-500" />
+            </Ticket>
           </label>
         )}
         <p className="text-right text-sm italic" style={{ color: XMAS.muted }}>
@@ -1146,27 +1293,51 @@ function LetterElves() {
 /** How long the opening show lasts. Keep in sync: every opening keyframe in styles.css runs on var(--open). */
 const OPEN_MS = 3000
 
+/** Remembers, per browser, that someone opened the golden letter for this match. */
+function openedLetterKey(activityId: string, matchName: string) {
+  return `secret-santa-opened:${activityId}:${matchName}`
+}
+
+function readLetterOpened(key: string | null) {
+  if (!key) return false
+  try {
+    return localStorage.getItem(key) === "1"
+  } catch {
+    return false
+  }
+}
+
 function Reveal({
   activityId,
+  storageKey,
+  initiallyOpen,
+  onOpened,
   match,
   exchange,
 }: {
   activityId: string
+  storageKey: string
+  initiallyOpen: boolean
+  /** Called once the letter is open and the name is showing (also when it already was). */
+  onOpened: () => void
   match: NonNullable<SecretSantaView["match"]>
   exchange: string
 }) {
-  const storageKey = `secret-santa-opened:${activityId}:${match.name}`
-  const [stage, setStage] = useState<RevealStage>(() => {
-    try {
-      return localStorage.getItem(storageKey) === "1" ? "open" : "sealed"
-    } catch {
-      return "sealed"
-    }
-  })
+  const [stage, setStage] = useState<RevealStage>(initiallyOpen ? "open" : "sealed")
   const [celebrate, setCelebrate] = useState(false)
   const revealedName = useRef<HTMLHeadingElement>(null)
+  const sealedLetter = useRef<HTMLDivElement>(null)
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined)
   useEffect(() => () => clearTimeout(timer.current), [])
+  const opened = useEffectEvent(onOpened)
+  useEffect(() => {
+    if (stage === "open") opened()
+  }, [stage])
+  useEffect(() => {
+    // A reminder email links to the gift confirmation, which waits for the letter: show the letter.
+    if (!initiallyOpen && window.location.hash === `#gift-confirmation-${activityId}`)
+      sealedLetter.current?.scrollIntoView({ block: "start" })
+  }, [initiallyOpen, activityId])
   useEffect(() => {
     if (stage === "open" && celebrate) revealedName.current?.focus({ preventScroll: true })
     if (stage !== "opening") return
@@ -1211,7 +1382,8 @@ function Reveal({
   if (stage !== "open") {
     return (
       <div
-        className={`text-center ${stage === "opening" ? "xmas-stage-out" : "xmas-rise"}`}
+        ref={sealedLetter}
+        className={`scroll-mt-6 text-center ${stage === "opening" ? "xmas-stage-out" : "xmas-rise"}`}
         style={{ "--open": `${OPEN_MS}ms` } as CSSProperties}
       >
         <div className="flex h-88 items-end justify-center pb-3">
@@ -1334,19 +1506,93 @@ function TagLine({ icon, label, children }: { icon: IconName; label: string; chi
 
 // ---- gadget draw --------------------------------------------------------------------------
 
+/** Where the ticket is perforated: the stub's width, and the two notches cut on that line. */
+const TICKET_STUB = "4.75rem"
+const TICKET_NOTCH: CSSProperties = {
+  maskImage: `radial-gradient(circle at ${TICKET_STUB} 0, transparent 9px, #000 9.5px), radial-gradient(circle at ${TICKET_STUB} 100%, transparent 9px, #000 9.5px)`,
+  maskSize: "100% 51%",
+  maskPosition: "top, bottom",
+  maskRepeat: "no-repeat",
+}
+const GOLD_TICKET = "linear-gradient(135deg, oklch(97% 0.045 92) 0%, oklch(91% 0.08 88) 100%)"
+const ICE_TICKET = `linear-gradient(135deg, ${XMAS.white} 0%, ${XMAS.ice} 100%)`
+
+/**
+ * A tear-off ticket: a stub with a picture, a perforated line with two notches, and the text. Gold
+ * when it counts, ice otherwise. The notches are a mask, so the outer span carries the focus ring
+ * and the drop shadow (a mask would clip both).
+ */
+function Ticket({
+  gold,
+  stub,
+  className = "",
+  children,
+}: {
+  gold: boolean
+  stub: ReactNode
+  className?: string
+  children: ReactNode
+}) {
+  return (
+    <span
+      className={`block rounded-2xl ${className}`}
+      style={{
+        filter: gold
+          ? "drop-shadow(0 8px 14px oklch(60% 0.1 75 / 0.25))"
+          : "drop-shadow(0 4px 10px oklch(35% 0.06 250 / 0.1))",
+      }}
+    >
+      <span
+        className="relative flex min-h-24 rounded-2xl"
+        style={{ ...TICKET_NOTCH, background: gold ? GOLD_TICKET : ICE_TICKET, color: INK }}
+      >
+        <span
+          aria-hidden
+          className="pointer-events-none absolute inset-1.5 rounded-xl border-[1.5px] border-dashed"
+          style={{ borderColor: gold ? XMAS.goldDark : XMAS.sky }}
+        />
+        <span
+          aria-hidden
+          className="flex shrink-0 items-center justify-center"
+          style={{ width: TICKET_STUB }}
+        >
+          {stub}
+        </span>
+        <span
+          aria-hidden
+          className="my-3 shrink-0 border-l-2 border-dotted"
+          style={{ borderColor: gold ? XMAS.goldDark : XMAS.sky }}
+        />
+        <span className="relative min-w-0 flex-1 py-4 pr-4 pl-4">{children}</span>
+      </span>
+    </span>
+  )
+}
+
+/** Shown under the letter to people who entered the gadget draw. It never says what the gadget is. */
 function GadgetTicket({ santa }: { santa: SecretSantaView }) {
   const { config, entry } = santa
   if (!config.gadget.enabled || !entry?.gadget) return null
 
   return (
-    <div
-      className="flex items-center gap-4 rounded-2xl border border-dashed bg-white/70 px-5 py-4 text-sm backdrop-blur-sm"
-      style={{ borderColor: XMAS.goldDark }}
-    >
-      <Icon name="ticket" className="size-7 shrink-0 text-amber-500" />
-      <p style={{ color: XMAS.navy }}>
-        Adesione registrata per <b>{GADGET_NAME}</b>. La sorpresa arriverà più avanti.
-      </p>
+    <div className="xmas-rise">
+      <Ticket gold stub={<MysteryGift className="xmas-wobble h-14 w-13" />}>
+        <span
+          className="float-right ml-2 inline-block rounded-md border-2 px-1.5 py-0.5 text-[11px] font-black tracking-[0.14em] whitespace-nowrap uppercase"
+          style={{ borderColor: XMAS.pine, color: XMAS.pine, transform: "rotate(-8deg)" }}
+        >
+          Sei dentro!
+        </span>
+        <span className="block text-[11px] font-bold tracking-[0.2em] uppercase" style={{ color: GOLD_INK }}>
+          Gadget segreto
+        </span>
+        <span className="mt-1 block font-semibold text-pretty">
+          Sei nell'estrazione del gadget segreto PoliNetwork.
+        </span>
+        <span className="mt-0.5 block text-sm" style={{ color: XMAS.muted }}>
+          Cos'è? Lo scoprirai più avanti.
+        </span>
+      </Ticket>
     </div>
   )
 }
