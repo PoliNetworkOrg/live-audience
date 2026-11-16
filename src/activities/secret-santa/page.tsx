@@ -94,7 +94,9 @@ export function SecretSantaPage() {
         style={{ background: `linear-gradient(to bottom, ${XMAS.ice}, oklch(92% 0.035 240))` }}
       >
         <FlyingSleigh />
-        <SnowyHills />
+        <div className="opacity-20 sm:opacity-100">
+          <SnowyHills />
+        </div>
         <div className="opacity-40 sm:opacity-100">
           <Snowfall />
         </div>
@@ -115,9 +117,7 @@ export function SecretSantaPage() {
           {user && <UserChip user={user} />}
         </div>
       </header>
-      <main className="relative z-10 mx-auto mt-6 mb-8 w-[calc(100%-2rem)] max-w-lg rounded-3xl border border-white bg-white px-4 py-6 shadow-sm sm:px-6 sm:py-8">
-        {content}
-      </main>
+      <main className="relative z-10 mx-auto w-full max-w-lg px-5 pt-8 pb-8 sm:pb-[46lvh]">{content}</main>
     </div>
   )
 }
@@ -150,13 +150,15 @@ function SignedOut() {
   return (
     <div className="xmas-rise space-y-4 text-center sm:space-y-6">
       <SantaLogo className="mx-auto h-32 w-auto sm:h-52" />
-      <Eyebrow>Secret Santa</Eyebrow>
-      <h1 className="text-3xl font-semibold tracking-tight text-balance sm:text-5xl">
-        Qualcuno in PoliNetwork ha un regalo per te
-      </h1>
-      <p className="leading-relaxed text-pretty" style={{ color: XMAS.muted }}>
-        Accedi con il tuo account PoliNetwork per scrivere la tua letterina e scoprire chi devi sorprendere.
-      </p>
+      <div className="space-y-4 rounded-3xl bg-sky-50 px-4 py-5 sm:bg-transparent sm:p-0 sm:space-y-6">
+        <Eyebrow>Secret Santa</Eyebrow>
+        <h1 className="text-3xl font-semibold tracking-tight text-balance sm:text-5xl">
+          Qualcuno in PoliNetwork ha un regalo per te
+        </h1>
+        <p className="leading-relaxed text-pretty" style={{ color: XMAS.muted }}>
+          Accedi con il tuo account PoliNetwork per scrivere la tua letterina e scoprire chi devi sorprendere.
+        </p>
+      </div>
       <a
         href={loginUrl(`${SECRET_SANTA_PATH}${window.location.search}${window.location.hash}`)}
         className="inline-flex min-h-12 w-full items-center justify-center rounded-full px-4 py-3 text-base font-semibold text-white shadow-lg transition active:scale-[0.97] sm:px-6 sm:py-4 sm:text-lg"
@@ -698,28 +700,33 @@ function Hero({ santa, now }: { santa: SecretSantaView; now: number }) {
   return (
     <section className="xmas-rise space-y-5 text-center">
       <SantaLogo className="mx-auto h-32 w-auto sm:h-52" />
-      <Eyebrow>Secret Santa PoliNetwork</Eyebrow>
-      <h1 id={`santa-${santa.id}`} className="text-3xl font-semibold tracking-tight text-balance sm:text-5xl">
-        {santa.title}
-      </h1>
-      {days >= 0 && (
-        <p
-          className="inline-flex items-center gap-2 rounded-full border bg-white/80 px-4 py-1.5 text-sm font-medium shadow-sm backdrop-blur-sm"
-          style={{ borderColor: XMAS.frost, color: XMAS.brand800 }}
+      <div className="space-y-5 rounded-3xl bg-sky-50 px-4 py-5 sm:bg-transparent sm:p-0">
+        <Eyebrow>Secret Santa PoliNetwork</Eyebrow>
+        <h1
+          id={`santa-${santa.id}`}
+          className="text-3xl font-semibold tracking-tight text-balance sm:text-5xl"
         >
-          <Icon name="star" className="size-4 text-amber-500" />
-          {days === 0
-            ? "Buon Natale!"
-            : days === 1
-              ? "Manca 1 giorno a Natale"
-              : `Mancano ${days} giorni a Natale`}
-        </p>
-      )}
-      {config.intro && (
-        <p className="mx-auto max-w-md leading-relaxed text-pretty" style={{ color: XMAS.muted }}>
-          {config.intro}
-        </p>
-      )}
+          {santa.title}
+        </h1>
+        {days >= 0 && (
+          <p
+            className="inline-flex items-center gap-2 rounded-full border bg-white/80 px-4 py-1.5 text-sm font-medium shadow-sm backdrop-blur-sm"
+            style={{ borderColor: XMAS.frost, color: XMAS.brand800 }}
+          >
+            <Icon name="star" className="size-4 text-amber-500" />
+            {days === 0
+              ? "Buon Natale!"
+              : days === 1
+                ? "Manca 1 giorno a Natale"
+                : `Mancano ${days} giorni a Natale`}
+          </p>
+        )}
+        {config.intro && (
+          <p className="mx-auto max-w-md leading-relaxed text-pretty" style={{ color: XMAS.muted }}>
+            {config.intro}
+          </p>
+        )}
+      </div>
       {details.length > 0 && (
         <dl
           className="mx-auto grid max-w-md gap-px overflow-hidden rounded-2xl border text-left text-sm shadow-sm sm:grid-cols-2"
