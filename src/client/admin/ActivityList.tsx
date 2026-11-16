@@ -184,13 +184,16 @@ export function ActivityRows({
             >
               <Icon name="rotate-ccw" />
             </Button>
-            <Button
-              variant={onStage ? "secondary" : "success"}
-              disabled={onStage && stage?.status === "open"}
-              onClick={() => void controlStage({ activity: a.id, status: "open" })}
-            >
-              <Icon name="play" /> Open
-            </Button>
+            {/* Secret Santa runs off stage, from the home page. */}
+            {a.type !== "secret-santa" && (
+              <Button
+                variant={onStage ? "secondary" : "success"}
+                disabled={onStage && stage?.status === "open"}
+                onClick={() => void controlStage({ activity: a.id, status: "open" })}
+              >
+                <Icon name="play" /> Open
+              </Button>
+            )}
           </div>
         )
       })}
@@ -225,11 +228,13 @@ export function NewActivity({
   const [presentation, setPresentation] = useState(presentationId ?? "")
   const [error, setError] = useState<string | null>(null)
   const effectiveSlug = slug ?? slugify(title)
+  // Secret Santa runs off stage for weeks and belongs to no presentation.
+  const ungrouped = type === "secret-santa"
 
   const create = async () => {
     try {
       const created = await api<{ id: string }>("/api/admin/activities", {
-        body: { type, title, slug: effectiveSlug, presentationId: presentation || null },
+        body: { type, title, slug: effectiveSlug, presentationId: ungrouped ? null : presentation || null },
       })
       navigate(`/activities/${created.id}`)
     } catch (e) {
@@ -260,7 +265,15 @@ export function NewActivity({
           <Input value={effectiveSlug} onChange={(e) => setSlug(e.target.value)} placeholder="dinner-poll" />
         </Field>
         <Field label="Presentation">
-          <PresentationSelect presentations={presentations} value={presentation} onChange={setPresentation} />
+          {ungrouped ? (
+            <Input value="None: runs on its own" disabled readOnly />
+          ) : (
+            <PresentationSelect
+              presentations={presentations}
+              value={presentation}
+              onChange={setPresentation}
+            />
+          )}
         </Field>
         <Button type="submit" variant="primary" disabled={!title.trim() || !effectiveSlug} className="py-2">
           <Icon name="plus" /> Create

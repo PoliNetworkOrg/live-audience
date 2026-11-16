@@ -3,6 +3,7 @@ import { numberEstimate } from "./number-estimate/definition.ts"
 import { numberLottery } from "./number-lottery/definition.ts"
 import { poll } from "./poll/definition.ts"
 import { purchaseInterest } from "./purchase-interest/definition.ts"
+import { secretSanta } from "./secret-santa/definition.ts"
 import type { AnyActivityDefinition } from "./types.ts"
 import { wheel } from "./wheel/definition.ts"
 import { wordCloud } from "./word-cloud/definition.ts"
@@ -14,6 +15,7 @@ export const activityDefinitions: Record<string, AnyActivityDefinition> = {
   [numberLottery.type]: numberLottery,
   [poll.type]: poll,
   [purchaseInterest.type]: purchaseInterest,
+  [secretSanta.type]: secretSanta,
   [wheel.type]: wheel,
   [wordCloud.type]: wordCloud,
 }

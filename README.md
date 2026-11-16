@@ -5,6 +5,7 @@ Live audience interaction (polls, word clouds, a prize wheel, a number lottery a
 - **Audience page** (`/`): people sign in with their PoliNetwork account and see whatever is "on stage", usually nothing. When the presenter opens an activity it appears there, live. Everyone can play, except in activities marked **Soci only**. Every activity fits one phone screen: once answers close the verdict comes first, and the right answer and the person's own one wait behind "Show" buttons.
 - **Admin page** (`/admin`): create and edit activities, group them into presentations, put them on stage by hand, preview results and leaderboards, manage the API key. Reserved to an IdP permission.
 - **Presentation API** (`/api/v1`): one global API key lets an HTML presentation open/close activities as slides change and read live results to draw its own charts.
+- **Secret Santa** (off stage, no points): anyone signed in (only Soci when it is marked **Soci only**) writes a letter on the Christmas-themed `/secret-santa` page. The admin sets sign-up and draw dates. After the gift draw, letters cannot be edited; each participant sees only their own recipient and confirms when they have bought or prepared the gift. At the optional confirmation deadline, unconfirmed participants receive a final warning and can still confirm until midnight of that calendar day in Europe/Rome. At midnight they are removed and the gift cycle is rewired, with removal/reassignment emails. Confirmations of reassigned participants stay valid. Gadget participation is collected, but its draw and winner reveal are currently suspended. Private matches, confirmations and contact details never leave through the presentation API key.
 
 There is exactly one stage, so exactly one presentation at a time: no join codes, no QR codes. Signing in is the ticket.
 
@@ -27,7 +28,8 @@ it was changed.
 | Guess the real number | 1 for the exact figure, down to 0 when off by 100% of it |
 | Number lottery | 1 − distance / 100 from the drawn number |
 
-Polls, word clouds, purchase interest and the wheel have no right answer and score nothing.
+Polls, word clouds, purchase interest and the wheel have no right answer and score nothing; Secret Santa
+runs off stage and never scores.
 An activity with **Counts towards the leaderboard** off (Admin, activity page) still scores, and
 phones still show the points, but they stay off the leaderboard; switching it back adds them again.
 Leaderboards export the account names of the people on them, never account ids.
@@ -67,7 +69,7 @@ The app is a regular OIDC client of `auth.polinetwork.org`.
 1. **Register the application** at `<IdP>/applications/new`:
    - application type **web**, redirect URI `https://<host>/auth/callback`, post-logout redirect URI `https://<host>/`
    - credential **client secret** (`client_secret_basic`)
-   - scopes `openid profile polinetwork:identity`
+   - scopes `openid profile email polinetwork:identity` (`email` is used only for the Secret Santa draw email)
    - optionally enable end-session (logout also signs out of the IdP) and skip consent (first-party app)
 
    For local development against a local IdP (`http://localhost:3000`), register a separate **native** app with redirect URI `http://localhost:5173/auth/callback`: the IdP refuses localhost redirects for web apps.
@@ -89,6 +91,7 @@ Roles and permissions are read from the ID token (`polinetwork_roles`, `polinetw
 | `ADMIN_PERMISSION` | `live-audience:admin` | IdP permission needed for `/admin` |
 | `SESSION_DAYS` | `7` | |
 | `DEV_LOGIN` | `false` | Local fake sign-in |
+| `MAILER_URL`, `MAILER_TOKEN` | | Secret Santa emails, set together (see below) |
 
 ## Deployment
 
@@ -106,6 +109,33 @@ docker run -p 8787:8787 -v live-audience-data:/data \
 - Persist `/data`. Back it up if you care about old answers.
 - Server-Sent Events go through Cloudflare and Traefik as is; the server pings every 20 s so idle connections stay open.
 - `GET /healthz` returns `ok`.
+
+### Secret Santa emails
+
+Live sends template data to the PoliNetwork backend; the backend uses its existing transactional sender.
+Set `MAILER_URL` on Live to `https://<backend>/internal/secret-santa/emails` and set the same random secret
+(at least 32 characters) in Live's `MAILER_TOKEN` and the backend's `LIVE_MAILER_TOKEN`. Set backend
+`LIVE_PUBLIC_URL` to Live's public origin (default `https://live.polinetwork.org`); email links are restricted
+to its `/secret-santa` page. HTTPS is required, except for localhost development.
+
+Without transport configuration, development logs notifications. In production missing configuration
+or delivery errors leave emails pending for retry; they are never marked as sent by logging. Configure
+delivery before enabling a confirmation deadline. A server outage does not extend the configured
+midnight deadline; warnings that have expired are replaced by removal notifications on recovery.
+Normal successful notifications are recorded once; a lost HTTP response after provider acceptance can
+cause a retry. The backend supplies stable Message-IDs for reconciliation.
+
+Email links require sign-in and an explicit confirmation button. Opening a link or email cannot confirm
+a gift. The date field is an ISO instant; midnight is calculated in Europe/Rome, including DST changes.
+The Secret Santa activity editor includes an admin-only operations panel with participant/confirmation
+counters, both directions of every gift assignment, contact details, full letters, search and status filters.
+Organizers can reorder the gift cycle with a preview, correct a gift confirmation or a letter, remove a
+participant, or readmit a former one with their letter.
+Corrections require a reason and reject stale snapshots. Assignment changes keep existing confirmations
+and notify affected participants; manual interventions are recorded with author, time and before/after values.
+
+Reset/undo starts a new round and clears confirmations and removal notices. Intervention history is retained
+until the activity is deleted. See `docs/secret-santa/`.
 
 ## Presentation API
 
@@ -264,6 +294,7 @@ Each type lives in `src/activities/<type>/` and has two halves:
      Audience,  // ({ config, me, outcome, response, open, submit }) for phones; me.name comes
                 // from the IdP, outcome says who won once a draw is decided
      Results,   // optional preview on the admin page (JSON otherwise)
+     Admin,     // optional extra admin controls (Secret Santa's operations panel)
    })
    ```
 

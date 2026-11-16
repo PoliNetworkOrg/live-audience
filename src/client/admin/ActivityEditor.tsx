@@ -7,6 +7,8 @@ import { Button, Card, Field, Input, Select, Tag, Toggle } from "../ui.tsx"
 import { PresentationSelect, type PresentationSummary } from "./ActivityList.tsx"
 import { controlStage, PageHeader, resetActivity, useStage } from "./AdminLayout.tsx"
 
+const SECRET_SANTA = "secret-santa"
+
 interface Activity {
   id: string
   slug: string
@@ -36,6 +38,12 @@ export function ActivityEditor({ id }: { id: string }) {
 
   const ui = activityUIs[draft.type]
   const saved = loaded.data
+  // Extra controls of the saved type: they act on what the server has, not on unsaved edits.
+  const SavedAdmin = activityUIs[saved.type]?.Admin
+  // Secret Santa runs off stage and never scores: stage and leaderboard settings do not apply.
+  // Staging acts on the server copy, so it follows the saved type; the settings follow the draft.
+  const offStage = saved.type === SECRET_SANTA
+  const ungrouped = draft.type === SECRET_SANTA
   const dirty = JSON.stringify(draft) !== JSON.stringify(loaded.data)
 
   const save = async () => {
@@ -82,7 +90,7 @@ export function ActivityEditor({ id }: { id: string }) {
           </span>
         }
       >
-        <StageButtons activityId={id} />
+        {!offStage && <StageButtons activityId={id} />}
       </PageHeader>
 
       <div className="grid gap-8 lg:grid-cols-[1fr_22rem]">
@@ -94,7 +102,17 @@ export function ActivityEditor({ id }: { id: string }) {
                 onChange={(type) => {
                   // Back to the saved type: get the saved settings back too.
                   const config = type === saved.type ? saved.config : configForType(type, draft.config)
-                  setDraft({ ...draft, type, config })
+                  // A Secret Santa belongs to no presentation (the server enforces it too).
+                  const grouping =
+                    type === SECRET_SANTA
+                      ? { presentationId: null, countsToLeaderboard: false }
+                      : draft.type === SECRET_SANTA && type === saved.type
+                        ? {
+                            presentationId: saved.presentationId,
+                            countsToLeaderboard: saved.countsToLeaderboard,
+                          }
+                        : {}
+                  setDraft({ ...draft, type, config, ...grouping })
                 }}
                 options={[
                   ...(activityUIs[saved.type] ? [] : [{ value: saved.type, label: saved.type }]),
@@ -113,13 +131,15 @@ export function ActivityEditor({ id }: { id: string }) {
               <Input value={draft.slug} onChange={(e) => setDraft({ ...draft, slug: e.target.value })} />
             </Field>
           </div>
-          <Field label="Presentation" hint="Points scored here count towards its leaderboard.">
-            <PresentationSelect
-              presentations={presentations.data ?? []}
-              value={draft.presentationId ?? ""}
-              onChange={(presentationId) => setDraft({ ...draft, presentationId: presentationId || null })}
-            />
-          </Field>
+          {!ungrouped && (
+            <Field label="Presentation" hint="Points scored here count towards its leaderboard.">
+              <PresentationSelect
+                presentations={presentations.data ?? []}
+                value={draft.presentationId ?? ""}
+                onChange={(presentationId) => setDraft({ ...draft, presentationId: presentationId || null })}
+              />
+            </Field>
+          )}
           <div className="grid gap-x-4 gap-y-4 sm:grid-cols-2">
             <Toggle
               label="Soci only"
@@ -127,12 +147,14 @@ export function ActivityEditor({ id }: { id: string }) {
               checked={draft.membersOnly}
               onChange={(membersOnly) => setDraft({ ...draft, membersOnly })}
             />
-            <Toggle
-              label="Counts towards the leaderboard"
-              hint="Off: the game still scores and shows points on phones, but they stay off the leaderboard."
-              checked={draft.countsToLeaderboard}
-              onChange={(countsToLeaderboard) => setDraft({ ...draft, countsToLeaderboard })}
-            />
+            {!ungrouped && (
+              <Toggle
+                label="Counts towards the leaderboard"
+                hint="Off: the game still scores and shows points on phones, but they stay off the leaderboard."
+                checked={draft.countsToLeaderboard}
+                onChange={(countsToLeaderboard) => setDraft({ ...draft, countsToLeaderboard })}
+              />
+            )}
           </div>
           {draft.type !== saved.type && (
             <p className="rounded-xl bg-amber-400/15 px-3 py-2 text-sm text-amber-800">
@@ -161,9 +183,13 @@ export function ActivityEditor({ id }: { id: string }) {
             </Button>
           </div>
         </Card>
-        {/* Results of the old type do not fit the new one's preview. */}
-        <ResultsPanel key={saved.type} activity={saved} />
+        <div className="space-y-6">
+          {/* Results of the old type do not fit the new one's preview. */}
+          <ResultsPanel key={saved.type} activity={saved} />
+          {SavedAdmin && saved.type !== SECRET_SANTA && <SavedAdmin activityId={id} config={saved.config} />}
+        </div>
       </div>
+      {SavedAdmin && saved.type === "secret-santa" && <SavedAdmin activityId={id} config={saved.config} />}
     </div>
   )
 }

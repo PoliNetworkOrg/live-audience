@@ -1,4 +1,5 @@
 import { Route, Switch } from "wouter"
+import { SECRET_SANTA_PATH, SecretSantaPage } from "../activities/secret-santa/page.tsx"
 import { ActivityEditor } from "./admin/ActivityEditor.tsx"
 import { ActivityList } from "./admin/ActivityList.tsx"
 import { AdminLayout } from "./admin/AdminLayout.tsx"
@@ -25,6 +26,9 @@ export function App() {
             <Route path="/presentations/:id">{({ id }) => <PresentationPage key={id} id={id} />}</Route>
           </Switch>
         </AdminLayout>
+      </Route>
+      <Route path={SECRET_SANTA_PATH}>
+        <SecretSantaPage />
       </Route>
       <Route>
         <AudiencePage />

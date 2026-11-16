@@ -1,4 +1,4 @@
-import { createContext, type ReactNode, useContext, useState } from "react"
+import { createContext, type ReactNode, useContext, useEffect, useState } from "react"
 import { Link, useRoute } from "wouter"
 import { api, loginUrl, logout, useEventStream, useMe } from "../api.ts"
 import { Backdrop, Wordmark } from "../brand.tsx"
@@ -118,6 +118,7 @@ export function AdminLayout({ children }: { children: ReactNode }) {
               </a>
             </nav>
             <div className="ml-auto flex items-center gap-1.5 text-sm text-slate-600">
+              <ChristmasSwitch />
               <span className="hidden px-2 sm:inline">{user.name}</span>
               <Button variant="ghost" onClick={() => void logout()} title="Sign out">
                 <Icon name="log-out" /> Sign out
@@ -162,6 +163,97 @@ export function PageHeader({
       </div>
       {children && <div className="flex flex-wrap items-center gap-2.5">{children}</div>}
     </div>
+  )
+}
+
+/**
+ * Switches the audience page (and its sign-in screen) to the Christmas scene for everyone. Saved
+ * as soon as it is flipped; open phones pick it up within a minute.
+ */
+function ChristmasSwitch() {
+  const [on, setOn] = useState<boolean | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [loadAttempt, setLoadAttempt] = useState(0)
+  // biome-ignore lint/correctness/useExhaustiveDependencies: loadAttempt retries the initial request
+  useEffect(() => {
+    let cancelled = false
+    setError(null)
+    api<{ christmas: boolean }>("/api/theme")
+      .then(({ christmas }) => !cancelled && setOn(christmas))
+      .catch(() => !cancelled && setError("Could not load"))
+    return () => {
+      cancelled = true
+    }
+  }, [loadAttempt])
+
+  const toggle = async () => {
+    if (on === null || saving) return
+    const next = !on
+    setOn(next)
+    setSaving(true)
+    setError(null)
+    try {
+      setOn(
+        (await api<{ christmas: boolean }>("/api/admin/theme", { method: "PUT", body: { christmas: next } }))
+          .christmas,
+      )
+    } catch (e) {
+      setOn(!next)
+      setError(e instanceof Error ? e.message : "Not saved")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const status = saving ? "Saving…" : error ? "Not saved" : null
+  return (
+    <span className="flex items-center gap-2">
+      {status && (
+        <span
+          role={error ? "alert" : "status"}
+          title={error ?? undefined}
+          className={cx("text-xs", error ? "font-medium text-rose-600" : "text-slate-500")}
+        >
+          {status}
+        </span>
+      )}
+      {on === null && error && (
+        <button
+          type="button"
+          onClick={() => setLoadAttempt((attempt) => attempt + 1)}
+          className="text-xs underline"
+        >
+          Retry
+        </button>
+      )}
+      <button
+        type="button"
+        role="switch"
+        aria-checked={on ?? false}
+        aria-busy={saving}
+        disabled={on === null || saving}
+        onClick={() => void toggle()}
+        title="Shows the snowy Christmas scene on the audience page and its sign-in screen"
+        className="flex items-center gap-2 rounded-full py-1.5 pr-1.5 pl-3 font-medium text-slate-700 transition hover:bg-white focus-visible:ring-4 focus-visible:ring-blue-400/40 focus-visible:outline-none disabled:cursor-wait disabled:opacity-70"
+      >
+        Modalità Natale
+        <span
+          aria-hidden
+          className={cx(
+            "relative h-5 w-9 shrink-0 rounded-full transition-colors",
+            on ? "bg-pn" : "bg-slate-300",
+          )}
+        >
+          <span
+            className={cx(
+              "absolute top-0.5 left-0.5 size-4 rounded-full bg-white shadow-sm transition-transform",
+              on && "translate-x-4",
+            )}
+          />
+        </span>
+      </button>
+    </span>
   )
 }
 

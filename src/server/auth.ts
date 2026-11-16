@@ -15,6 +15,8 @@ export interface SessionUser {
   id: string
   name: string
   picture?: string
+  /** Contact address from the IdP's `email` claim, when it gives one. Used only to send activity emails. */
+  email?: string
   /** May answer activities (has the audience role, Socio by default). */
   canParticipate: boolean
   /** May use the admin page (has the admin permission). */
@@ -25,7 +27,7 @@ export type AuthVariables = { user: SessionUser | null }
 
 const SESSION_COOKIE = "la_session"
 const FLOW_COOKIE = "la_oidc"
-const SCOPES = "openid profile polinetwork:identity"
+const SCOPES = "openid profile email polinetwork:identity"
 
 interface Session {
   user: SessionUser
@@ -67,6 +69,7 @@ export function createAuth(env: Env, db: Database) {
       id: claims.sub,
       name: typeof claims.name === "string" && claims.name ? claims.name : "Anonymous",
       picture: typeof claims.picture === "string" ? claims.picture : undefined,
+      email: typeof claims.email === "string" && claims.email ? claims.email : undefined,
       canParticipate: roles.includes(env.AUDIENCE_ROLE),
       isAdmin: permissions.includes(env.ADMIN_PERMISSION),
     }
@@ -210,7 +213,14 @@ export function createAuth(env: Env, db: Database) {
       // Each tab can be a different person: append ?n=2 to get a distinct "Sara Socia 2".
       const n = c.req.query("n")
       createSession(c, {
-        user: n ? { ...persona, id: `${persona.id}-${n}`, name: `${persona.name} ${n}` } : persona,
+        user: n
+          ? {
+              ...persona,
+              id: `${persona.id}-${n}`,
+              name: `${persona.name} ${n}`,
+              email: `${persona.id}-${n}@example.test`,
+            }
+          : { ...persona, email: `${persona.id}@example.test` },
         idToken: null,
       })
       return c.redirect(returnTo)

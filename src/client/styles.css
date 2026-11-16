@@ -369,3 +369,823 @@
     animation: none;
   }
 }
+
+/* ---- Secret Santa ------------------------------------------------------------------------ */
+
+@keyframes snow {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(var(--drift, 0), var(--fall, 70rem), 0);
+  }
+}
+
+@keyframes xmas-twinkle {
+  0%,
+  100% {
+    opacity: 0.25;
+    transform: scale(0.8);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes xmas-bulb {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+
+/* A gentle nudge every few seconds: "open me". */
+@keyframes xmas-wobble {
+  0%,
+  78%,
+  100% {
+    transform: rotate(0);
+  }
+  82% {
+    transform: rotate(-5deg);
+  }
+  86% {
+    transform: rotate(4deg);
+  }
+  90% {
+    transform: rotate(-2.5deg);
+  }
+  94% {
+    transform: rotate(1.5deg);
+  }
+}
+
+@keyframes xmas-shake {
+  0%,
+  100% {
+    transform: translateX(0) rotate(0);
+  }
+  15% {
+    transform: translateX(-5px) rotate(-5deg);
+  }
+  30% {
+    transform: translateX(5px) rotate(5deg);
+  }
+  45% {
+    transform: translateX(-4px) rotate(-3deg);
+  }
+  60% {
+    transform: translateX(3px) rotate(2deg);
+  }
+  75% {
+    transform: translateX(0) rotate(0) scale(1.04);
+  }
+}
+
+@keyframes xmas-lid-off {
+  to {
+    transform: translate(30px, -110px) rotate(32deg);
+    opacity: 0;
+  }
+}
+
+@keyframes xmas-burst {
+  from {
+    transform: translate(0, 0) scale(0.3) rotate(0);
+    opacity: 1;
+  }
+  70% {
+    opacity: 1;
+  }
+  to {
+    transform: translate(var(--x), var(--y)) scale(1) rotate(var(--r));
+    opacity: 0;
+  }
+}
+
+@keyframes xmas-rise {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes xmas-tag {
+  from {
+    opacity: 0;
+    transform: translateY(60px) scale(0.85) rotate(-6deg);
+  }
+  to {
+    opacity: 1;
+    transform: rotate(-1.5deg);
+  }
+}
+
+@keyframes xmas-stamp {
+  0% {
+    opacity: 0;
+    transform: scale(2) rotate(-24deg);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(0.94) rotate(-12deg);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) rotate(-12deg);
+  }
+}
+
+@keyframes xmas-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.4) translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes xmas-shimmer {
+  0%,
+  55% {
+    transform: translateX(0) skewX(-20deg);
+  }
+  100% {
+    transform: translateX(450%) skewX(-20deg);
+  }
+}
+
+@keyframes xmas-float {
+  0%,
+  100% {
+    transform: translateY(0) rotate(-1deg);
+  }
+  50% {
+    transform: translateY(-8px) rotate(1deg);
+  }
+}
+
+@keyframes xmas-seal-break {
+  0% {
+    transform: translate(-50%, -50%) scale(1);
+  }
+  35% {
+    transform: translate(-50%, -50%) scale(1.25) rotate(-12deg);
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(0) rotate(50deg);
+    opacity: 0;
+  }
+}
+
+/* The flap swings up, then tucks behind the card coming out. */
+@keyframes xmas-flap-open {
+  0% {
+    transform: rotateX(0);
+    z-index: 30;
+  }
+  70% {
+    transform: rotateX(178deg);
+    z-index: 30;
+  }
+  71%,
+  100% {
+    transform: rotateX(178deg);
+    z-index: 5;
+  }
+}
+
+@keyframes xmas-card-out {
+  to {
+    transform: translateY(-78%);
+  }
+}
+
+/* Santa crosses the sky in 14 s, then the sky stays empty for a while. */
+@keyframes xmas-sleigh {
+  0% {
+    transform: translateX(-24rem);
+  }
+  35%,
+  100% {
+    transform: translateX(calc(100vw + 4rem));
+  }
+}
+
+@keyframes xmas-sleigh-bob {
+  0%,
+  100% {
+    transform: translateY(0) rotate(-2deg);
+  }
+  50% {
+    transform: translateY(-10px) rotate(1deg);
+  }
+}
+
+.xmas-sleigh {
+  animation: xmas-sleigh 40s linear 2s infinite both;
+}
+.xmas-sleigh-bob {
+  animation: xmas-sleigh-bob 2.4s ease-in-out infinite;
+}
+.xmas-float {
+  animation: xmas-float 3.6s ease-in-out infinite;
+}
+.xmas-seal-break {
+  animation: xmas-seal-break 0.45s cubic-bezier(0.3, 0.7, 0.4, 1) both;
+}
+.xmas-flap-open {
+  animation: xmas-flap-open 0.75s cubic-bezier(0.4, 0, 0.2, 1) 0.35s both;
+}
+.xmas-card-out {
+  animation: xmas-card-out 0.8s cubic-bezier(0.2, 0.9, 0.3, 1) 1.05s both;
+}
+
+.xmas-snow {
+  animation: snow 12s linear infinite;
+}
+@keyframes xmas-snow-sway {
+  from {
+    transform: rotate(-18deg);
+  }
+  to {
+    transform: rotate(18deg);
+  }
+}
+.xmas-snow-logo {
+  animation: xmas-snow-sway 12s ease-in-out infinite alternate;
+}
+.xmas-twinkle {
+  animation: xmas-twinkle 3s ease-in-out infinite;
+}
+.xmas-bulb {
+  animation: xmas-bulb 2.4s ease-in-out infinite;
+}
+.xmas-star {
+  animation: xmas-twinkle 2.8s ease-in-out infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+.xmas-wobble {
+  animation: xmas-wobble 4.5s ease-in-out infinite;
+  transform-origin: 50% 90%;
+}
+.xmas-shake {
+  animation: xmas-shake 0.5s ease-in-out both;
+  transform-origin: 50% 90%;
+}
+.xmas-lid-off {
+  animation: xmas-lid-off 0.5s cubic-bezier(0.3, 0.7, 0.4, 1) 0.45s both;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+.xmas-burst {
+  animation: xmas-burst 1.1s cubic-bezier(0.15, 0.8, 0.3, 1) 0.5s both;
+}
+.xmas-rise {
+  animation: xmas-rise 0.5s cubic-bezier(0.2, 0.8, 0.3, 1) both;
+}
+.xmas-tag {
+  animation: xmas-tag 0.7s cubic-bezier(0.2, 1.1, 0.35, 1) both;
+}
+.xmas-stamp {
+  animation: xmas-stamp 0.45s cubic-bezier(0.3, 1.4, 0.5, 1) 0.3s both;
+}
+.xmas-pop {
+  animation: xmas-pop 0.35s cubic-bezier(0.3, 1.4, 0.5, 1) both;
+}
+.xmas-shimmer {
+  animation: xmas-shimmer 3.2s ease-in-out infinite;
+}
+
+/* The opening scene shares a three-second timeline with Reveal's --open. */
+@keyframes xmas-letter-beats {
+  0%,
+  25%,
+  37%,
+  100% {
+    transform: rotate(0);
+  }
+  28%,
+  33% {
+    transform: rotate(-1.5deg);
+  }
+  30%,
+  35% {
+    transform: rotate(1.5deg);
+  }
+}
+@keyframes xmas-letter-flap {
+  0%,
+  36% {
+    transform: rotateX(0);
+  }
+  59%,
+  100% {
+    transform: rotateX(178deg);
+  }
+}
+@keyframes xmas-letter-card {
+  0%,
+  55% {
+    transform: translateY(0);
+  }
+  79%,
+  100% {
+    transform: translateY(-78%);
+  }
+}
+@keyframes xmas-stage-out {
+  0%,
+  91% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+@keyframes xmas-seal-half-l {
+  0%,
+  28% {
+    transform: none;
+    opacity: 1;
+  }
+  42%,
+  100% {
+    transform: translate(-24px, 38px) rotate(-32deg);
+    opacity: 0;
+  }
+}
+@keyframes xmas-seal-half-r {
+  0%,
+  28% {
+    transform: none;
+    opacity: 1;
+  }
+  42%,
+  100% {
+    transform: translate(24px, 38px) rotate(32deg);
+    opacity: 0;
+  }
+}
+@keyframes xmas-seal-ring {
+  0%,
+  27% {
+    transform: scale(0.9);
+    opacity: 0;
+  }
+  29% {
+    opacity: 1;
+  }
+  41%,
+  100% {
+    transform: scale(1.8);
+    opacity: 0;
+  }
+}
+@keyframes xmas-elf-a-path {
+  0% {
+    transform: translate(-8%, 10%);
+    opacity: 0;
+  }
+  7% {
+    opacity: 1;
+  }
+  22%,
+  46% {
+    transform: translate(34%, -32%);
+    opacity: 1;
+  }
+  65%,
+  83% {
+    transform: translate(8%, -5%);
+    opacity: 1;
+  }
+  91%,
+  100% {
+    transform: translate(8%, -5%);
+    opacity: 0;
+  }
+}
+@keyframes xmas-elf-b-path {
+  0%,
+  4% {
+    transform: translate(8%, 10%);
+    opacity: 0;
+  }
+  12% {
+    opacity: 1;
+  }
+  38%,
+  53% {
+    transform: translate(-12%, -73%);
+    opacity: 1;
+  }
+  79%,
+  84% {
+    transform: translate(-18%, -143%);
+    opacity: 1;
+  }
+  91%,
+  100% {
+    transform: translate(-18%, -143%);
+    opacity: 0;
+  }
+}
+@keyframes xmas-elf-hop {
+  0%,
+  18%,
+  42%,
+  100% {
+    transform: translateY(0);
+  }
+  9%,
+  32% {
+    transform: translateY(-12px);
+  }
+}
+@keyframes xmas-elf-a-arm {
+  0%,
+  20% {
+    transform: rotate(-110deg);
+  }
+  25% {
+    transform: rotate(-175deg);
+  }
+  29%,
+  33% {
+    transform: rotate(-85deg);
+  }
+  45%,
+  100% {
+    transform: rotate(-110deg);
+  }
+}
+@keyframes xmas-elf-b-arm {
+  0%,
+  29% {
+    transform: rotate(10deg);
+  }
+  44%,
+  83% {
+    transform: rotate(-165deg);
+  }
+  100% {
+    transform: rotate(10deg);
+  }
+}
+@keyframes xmas-elf-blink {
+  0%,
+  35%,
+  39%,
+  73%,
+  77%,
+  100% {
+    transform: scaleY(1);
+  }
+  37%,
+  75% {
+    transform: scaleY(0.1);
+  }
+}
+@keyframes xmas-puff {
+  from {
+    transform: scale(0.9);
+    opacity: 0.9;
+  }
+  to {
+    transform: scale(1.6);
+    opacity: 0;
+  }
+}
+@keyframes xmas-poof {
+  0%,
+  82% {
+    transform: scale(0.9);
+    opacity: 0;
+  }
+  86% {
+    opacity: 1;
+  }
+  96%,
+  100% {
+    transform: scale(1.8);
+    opacity: 0;
+  }
+}
+@keyframes xmas-spark {
+  from {
+    transform: translate(0, 0) rotate(0);
+    opacity: 0;
+  }
+  15% {
+    opacity: 1;
+  }
+  to {
+    transform: translate(var(--x), var(--y)) rotate(var(--r));
+    opacity: 0;
+  }
+}
+@keyframes xmas-letter-twinkle {
+  0%,
+  100% {
+    transform: scale(0.9) rotate(-15deg);
+    opacity: 0;
+  }
+  35% {
+    transform: scale(1.1) rotate(0);
+    opacity: 1;
+  }
+}
+@keyframes xmas-elf-tag {
+  from {
+    transform: translateY(12px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+@keyframes xmas-elf-wave {
+  0%,
+  100% {
+    transform: rotate(-110deg);
+  }
+  25%,
+  65% {
+    transform: rotate(-155deg);
+  }
+  45%,
+  85% {
+    transform: rotate(-95deg);
+  }
+}
+.xmas-letter-beats {
+  animation: xmas-letter-beats var(--open) ease-in-out both;
+}
+.xmas-letter-flap {
+  backface-visibility: hidden;
+  animation: xmas-letter-flap var(--open) cubic-bezier(0.25, 1, 0.5, 1) both;
+}
+.xmas-letter-card {
+  animation: xmas-letter-card var(--open) cubic-bezier(0.25, 1, 0.5, 1) both;
+}
+.xmas-stage-out {
+  animation: xmas-stage-out var(--open) ease both;
+}
+.xmas-seal-half-l {
+  animation: xmas-seal-half-l var(--open) ease-out both;
+}
+.xmas-seal-half-r {
+  animation: xmas-seal-half-r var(--open) ease-out both;
+}
+.xmas-seal-ring {
+  animation: xmas-seal-ring var(--open) ease-out both;
+}
+.xmas-elf-a-path {
+  animation: xmas-elf-a-path var(--open) cubic-bezier(0.25, 0.46, 0.45, 0.94) both;
+}
+.xmas-elf-b-path {
+  animation: xmas-elf-b-path var(--open) cubic-bezier(0.25, 0.46, 0.45, 0.94) both;
+}
+.xmas-elf-a-body,
+.xmas-elf-b-body {
+  animation: xmas-elf-hop var(--open) ease-in-out both;
+}
+.xmas-elf-a-arm {
+  animation: xmas-elf-a-arm var(--open) ease-in-out both;
+}
+.xmas-elf-b-arm {
+  animation: xmas-elf-b-arm var(--open) ease-in-out both;
+}
+.xmas-elf-blink {
+  animation: xmas-elf-blink var(--open) linear both;
+}
+.xmas-puff {
+  animation: xmas-puff 500ms ease-out both;
+}
+.xmas-poof {
+  animation: xmas-poof var(--open) ease-out both;
+}
+.xmas-spark {
+  animation: xmas-spark 550ms ease-out both;
+}
+.xmas-trail-twinkle,
+.xmas-card-twinkle {
+  animation: xmas-letter-twinkle 650ms ease both;
+}
+.xmas-elf-tag {
+  animation: xmas-elf-tag 450ms cubic-bezier(0.25, 1, 0.5, 1) 250ms both;
+}
+.xmas-elf-wave {
+  animation: xmas-elf-wave 1.2s ease-in-out 450ms both;
+}
+
+@keyframes xmas-send-paper {
+  0%,
+  8% {
+    transform: translateY(0);
+  }
+  29%,
+  100% {
+    transform: translateY(52px) scaleY(0.65);
+  }
+}
+@keyframes xmas-send-flap {
+  0%,
+  27% {
+    transform: rotateX(180deg);
+  }
+  43%,
+  100% {
+    transform: rotateX(0);
+  }
+}
+@keyframes xmas-send-flight {
+  0%,
+  48% {
+    transform: translate(0, 0) rotate(0);
+    opacity: 1;
+  }
+  61% {
+    transform: translate(-12px, -10px) rotate(-7deg);
+    opacity: 1;
+  }
+  88%,
+  100% {
+    transform: translate(210px, -190px) rotate(-18deg) scale(0.7);
+    opacity: 0;
+  }
+}
+@keyframes xmas-post-elf {
+  0%,
+  20% {
+    transform: translate(25px, 12px);
+    opacity: 0;
+  }
+  42%,
+  100% {
+    transform: translate(0, 0);
+    opacity: 1;
+  }
+}
+.xmas-send-paper {
+  animation: xmas-send-paper 2700ms ease-in-out both;
+}
+.xmas-send-flap {
+  animation: xmas-send-flap 2700ms cubic-bezier(0.25, 1, 0.5, 1) both;
+}
+.xmas-send-flight {
+  animation: xmas-send-flight 2700ms cubic-bezier(0.645, 0.045, 0.355, 1) both;
+}
+.xmas-post-elf {
+  animation: xmas-post-elf 2700ms ease-out both;
+}
+.xmas-send-star {
+  animation: xmas-spark 700ms ease-out 1400ms both;
+  --x: -50px;
+  --y: 20px;
+  --r: 35deg;
+}
+
+/* Wrapping the present when someone confirms their gift: lid down, ribbon on, bow, check. */
+@keyframes xmas-gift-lid {
+  from {
+    transform: translate(2px, -14px) rotate(-12deg);
+  }
+  70% {
+    transform: translateY(2px);
+  }
+  to {
+    transform: none;
+  }
+}
+@keyframes xmas-gift-ribbon {
+  from {
+    transform: scaleY(0);
+  }
+  to {
+    transform: none;
+  }
+}
+@keyframes xmas-gift-bow {
+  0% {
+    transform: scale(0) rotate(-30deg);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.15) rotate(6deg);
+    opacity: 1;
+  }
+  100% {
+    transform: none;
+    opacity: 1;
+  }
+}
+.xmas-gift-lid {
+  animation: xmas-gift-lid 450ms cubic-bezier(0.3, 0.7, 0.4, 1) both;
+}
+.xmas-gift-ribbon {
+  transform-box: fill-box;
+  transform-origin: top;
+  animation: xmas-gift-ribbon 320ms ease-out 260ms both;
+}
+.xmas-gift-bow {
+  transform-box: fill-box;
+  transform-origin: 50% 90%;
+  animation: xmas-gift-bow 450ms cubic-bezier(0.3, 1.4, 0.5, 1) 620ms both;
+}
+.xmas-gift-check {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: xmas-pop 350ms cubic-bezier(0.3, 1.4, 0.5, 1) 900ms both;
+}
+
+/* Reduced motion: decorations hold still, content just appears. */
+@media (prefers-reduced-motion: reduce) {
+  .xmas-letter-beats,
+  .xmas-letter-flap,
+  .xmas-letter-card,
+  .xmas-stage-out,
+  .xmas-seal-half-l,
+  .xmas-seal-half-r,
+  .xmas-seal-ring,
+  .xmas-elf-a-path,
+  .xmas-elf-b-path,
+  .xmas-elf-a-body,
+  .xmas-elf-b-body,
+  .xmas-elf-a-arm,
+  .xmas-elf-b-arm,
+  .xmas-elf-blink,
+  .xmas-puff,
+  .xmas-poof,
+  .xmas-spark,
+  .xmas-trail-twinkle,
+  .xmas-card-twinkle,
+  .xmas-elf-tag,
+  .xmas-elf-wave,
+  .xmas-send-paper,
+  .xmas-send-flap,
+  .xmas-send-flight,
+  .xmas-post-elf,
+  .xmas-send-star,
+  .xmas-gift-lid,
+  .xmas-gift-ribbon,
+  .xmas-gift-bow,
+  .xmas-gift-check {
+    animation: none;
+  }
+  .xmas-elf-a-path,
+  .xmas-elf-b-path,
+  .xmas-seal-ring,
+  .xmas-puff,
+  .xmas-poof,
+  .xmas-spark,
+  .xmas-trail-twinkle,
+  .xmas-card-twinkle,
+  .xmas-send-star {
+    display: none;
+  }
+  .xmas-snow,
+  .xmas-sleigh {
+    display: none;
+  }
+  .xmas-twinkle,
+  .xmas-snow-logo,
+  .xmas-sleigh-bob,
+  .xmas-float,
+  .xmas-seal-break,
+  .xmas-flap-open,
+  .xmas-card-out,
+  .xmas-bulb,
+  .xmas-star,
+  .xmas-wobble,
+  .xmas-shake,
+  .xmas-lid-off,
+  .xmas-burst,
+  .xmas-rise,
+  .xmas-tag,
+  .xmas-stamp,
+  .xmas-pop,
+  .xmas-shimmer {
+    animation: none;
+  }
+  .xmas-burst,
+  .xmas-shimmer {
+    display: none;
+  }
+  .xmas-tag {
+    transform: rotate(-1.5deg);
+  }
+}

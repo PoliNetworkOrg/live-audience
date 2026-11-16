@@ -1,4 +1,12 @@
-import { type ReactNode, useState } from "react"
+import { type ReactNode, useEffect, useState } from "react"
+import {
+  FlyingSleigh,
+  Snowfall,
+  SnowyHills,
+  StringLights,
+  XMAS,
+} from "../../activities/secret-santa/decorations.tsx"
+import { SecretSantaTeasers, useSecretSantas } from "../../activities/secret-santa/ui.tsx"
 import { activityUIs } from "../../activities/ui-registry.ts"
 import { api, loginUrl, logout, type Me, useEventStream, useMe } from "../api.ts"
 import { CountsToLeaderboard, Leaderboard, type LeaderboardView, MyPlace } from "../audience-ui.tsx"
@@ -23,31 +31,128 @@ interface AudienceStage {
   leaderboard: LeaderboardView | null
 }
 
+/** How often an open page asks whether the admins switched Christmas mode on or off. */
+const THEME_RECHECK_MS = 60_000
+
+/**
+ * Whether the admins switched the audience page to Christmas mode ("Modalità Natale"). Asked on
+ * load and every minute, so phones that stay open follow the switch without a reload.
+ */
+function useChristmas() {
+  const [christmas, setChristmas] = useState(false)
+  useEffect(() => {
+    let cancelled = false
+    const check = () => {
+      api<{ christmas: boolean }>("/api/theme")
+        .then((theme) => !cancelled && setChristmas(theme.christmas))
+        // Offline or restarting: keep the current look and ask again next time.
+        .catch(() => {})
+    }
+    check()
+    const timer = setInterval(check, THEME_RECHECK_MS)
+    return () => {
+      cancelled = true
+      clearInterval(timer)
+    }
+  }, [])
+  return christmas
+}
+
+/**
+ * Christmas mode's backdrop, in place of the usual shapes: the winter sky of the Secret Santa page
+ * with its garland, snow, hills and sleigh. Fixed behind everything, never scrolls nor takes taps;
+ * under reduced motion the snow and sleigh are gone and the rest holds still (see styles.css).
+ */
+function ChristmasScene() {
+  return (
+    <div
+      aria-hidden
+      className="pointer-events-none fixed inset-0 z-0 overflow-hidden"
+      style={{
+        background: `radial-gradient(70rem 32rem at 50% -8rem, oklch(62% 0.17 255 / 0.16), transparent 70%), linear-gradient(to bottom, ${XMAS.ice} 0%, oklch(95% 0.025 240) 55%, oklch(92% 0.035 240) 100%)`,
+      }}
+    >
+      <FlyingSleigh />
+      <SnowyHills />
+      <Snowfall />
+      {/* Only where the screen is tall enough to give the garland its own strip above the header. */}
+      <div className="absolute inset-x-0 top-[env(safe-area-inset-top)] hidden tall:block">
+        <StringLights />
+      </div>
+    </div>
+  )
+}
+
 export function AudiencePage() {
   const me = useMe()
   const user = me.data?.user
+  const christmas = useChristmas()
 
   let content: ReactNode
   if (me.loading && !me.data) content = <Spinner />
   else if (!user) content = <SignIn />
-  else content = <Live me={user} />
+  else content = <SignedIn me={user} />
 
   return (
     <div className="relative flex min-h-dvh flex-col text-slate-950">
-      <Backdrop />
-      <header className="relative z-10 flex items-center justify-between gap-3 px-4 pt-[max(0.75rem,env(safe-area-inset-top))] pb-2 tall:pt-[max(1.25rem,env(safe-area-inset-top))] tall:pb-3 sm:px-5">
+      {christmas ? <ChristmasScene /> : <Backdrop />}
+      <header
+        className={cx(
+          "relative z-10 flex items-center justify-between gap-3 px-4 pt-[max(0.75rem,env(safe-area-inset-top))] pb-2 tall:pb-3 sm:px-5",
+          christmas
+            ? "tall:pt-[calc(env(safe-area-inset-top)+2.5rem)]"
+            : "tall:pt-[max(1.25rem,env(safe-area-inset-top))]",
+        )}
+      >
         {/* On the narrowest phones "Live" makes room for the menu. */}
         <Wordmark suffix="Live" className="shrink-0 max-[22.5rem]:[&>.kicker]:hidden" />
         {user && <UserMenu user={user} />}
       </header>
       <main className="relative z-10 mx-auto flex w-full max-w-lg flex-1 flex-col justify-center px-5 pt-2 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
-        {content}
+        {/* In Christmas mode a frosted panel sits behind the content, reaching into the padding
+            around it: text never lies on trees or snow, and the layout does not move by a pixel. */}
+        <div className="relative">
+          {christmas && (
+            <div
+              aria-hidden
+              className="absolute -inset-x-3 -inset-y-3 -z-10 rounded-[28px] border-[1.5px] border-white bg-white/80 shadow-[0_30px_60px_-36px_rgb(17_86_174/0.45)] backdrop-blur-sm"
+            />
+          )}
+          {content}
+        </div>
       </main>
     </div>
   )
 }
 
-function Live({ me }: { me: Me }) {
+/**
+ * Secret Santa runs off stage, for days: while one is visible its card takes the place of the idle
+ * screen and, for people who are not Soci, of the Soci-only lock. Above a live activity it shrinks to
+ * one line, so the activity still fits one phone screen.
+ */
+function SignedIn({ me }: { me: Me }) {
+  const santas = useSecretSantas()
+  const santa = Boolean(santas?.length)
+  const [playing, setPlaying] = useState(false)
+  // Same tree with or without a Secret Santa, so the live feed is not reconnected once they load.
+  return (
+    <div className={playing ? "space-y-3" : "space-y-6 tall:space-y-8"}>
+      {santas && santa && <SecretSantaTeasers santas={santas} compact={playing} />}
+      <Live me={me} santa={santa} onPlaying={setPlaying} />
+    </div>
+  )
+}
+
+function Live({
+  me,
+  santa = false,
+  onPlaying,
+}: {
+  me: Me
+  santa?: boolean
+  /** Whether an activity this person can answer is on screen. */
+  onPlaying?: (playing: boolean) => void
+}) {
   const [stage, setStage] = useState<AudienceStage | null>(null)
   const [error, setError] = useState<string | null>(null)
   const connected = useEventStream("/api/audience/events", {
@@ -57,10 +162,15 @@ function Live({ me }: { me: Me }) {
     },
   })
 
+  const ui = stage?.activity && activityUIs[stage.activity.type]
+  const locked = Boolean(stage?.activity?.membersOnly && !me.canParticipate && !me.isAdmin)
+  const playing = Boolean(ui) && !locked
+  useEffect(() => onPlaying?.(playing), [onPlaying, playing])
+
   if (!stage) return <Spinner />
 
-  const ui = stage.activity && activityUIs[stage.activity.type]
   if (!stage.activity || !ui) {
+    if (santa) return stage.leaderboard ? <Leaderboard board={stage.leaderboard} /> : null
     return (
       <div className="space-y-10">
         <Centered
@@ -76,7 +186,8 @@ function Live({ me }: { me: Me }) {
   }
 
   const activity = stage.activity
-  if (activity.membersOnly && !me.canParticipate && !me.isAdmin) {
+  if (locked) {
+    if (santa) return stage.leaderboard ? <Leaderboard board={stage.leaderboard} /> : null
     return (
       <div key={activity.id} className="space-y-10">
         <SociOnly />

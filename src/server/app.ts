@@ -36,7 +36,29 @@ const presentationBody = z.object({
   title: z.string().trim().min(1).max(200),
   slug: z.string().trim().min(1).max(80),
 })
+const themeBody = z.object({ christmas: z.boolean() })
 const respondBody = z.object({ activityId: z.string(), response: z.unknown() })
+const santaAdminEdit = z.object({
+  revision: z.string().regex(/^[a-f0-9]{64}$/),
+  reason: z.string().trim().min(1).max(500),
+})
+const santaAssignments = santaAdminEdit.extend({
+  assignments: z.record(z.string().min(1).max(200), z.string().min(1).max(200).nullable()),
+})
+const santaConfirmation = santaAdminEdit.extend({ confirmed: z.boolean() })
+/** The letter itself is validated by the store against the activity's response schema. */
+const santaEntryEdit = santaAdminEdit.extend({ entry: z.unknown() })
+const santaReadmission = santaEntryEdit.extend({
+  giverId: z.string().min(1).max(200).nullable().optional(),
+  confirmed: z.boolean().default(false),
+})
+const santaRemoval = z.object({
+  reason: z.string().trim().min(1).max(500).default("Rimozione dagli organizzatori"),
+  revision: z
+    .string()
+    .regex(/^[a-f0-9]{64}$/)
+    .optional(),
+})
 
 async function parseBody<T>(c: { req: { json: () => Promise<unknown> } }, schema: z.ZodType<T>): Promise<T> {
   const body = await c.req.json().catch(() => ({}))
@@ -200,6 +222,9 @@ export function createApp({ store, session }: { store: Store; session: Middlewar
 
   app.get("/api/me", (c) => c.json({ user: c.get("user") }))
 
+  // Public: the sign-in screen is themed too.
+  app.get("/api/theme", (c) => c.json({ christmas: store.getTheme() === "christmas" }))
+
   // Anyone with a PoliNetwork account may play; activities marked members only take Soci alone.
   const audience = new Hono<AppEnv>()
     .use(requireUser(() => true))
@@ -233,6 +258,45 @@ export function createApp({ store, session }: { store: Store; session: Middlewar
       })
     })
   app.route("/api/audience", audience)
+
+  // Secret Santa runs off stage and is open to anyone signed in; one marked members only takes new
+  // sign-ups from Soci alone. Whoever already took part keeps it, even if "Soci only" came later:
+  // their match and gift confirmation live there.
+  const santa = new Hono<AppEnv>()
+    .use(requireUser(() => true))
+    .get("/", (c) => {
+      const user = c.get("user") as SessionUser
+      return c.json(
+        store
+          .listSecretSantas(user.id)
+          .filter(
+            (view) =>
+              isMember(user) ||
+              !store.getActivity(view.id)?.membersOnly ||
+              view.entry !== null ||
+              view.removed !== null,
+          ),
+      )
+    })
+    .post("/:id/confirm-gift", (c) => {
+      // JSON requests cannot be submitted by cross-site forms.
+      if (!/^application\/json(?:\s*;|$)/i.test(c.req.header("content-type") ?? "")) {
+        throw new HTTPException(415, { message: "Use application/json" })
+      }
+      return c.json(store.confirmSecretSantaGift(c.req.param("id"), (c.get("user") as SessionUser).id))
+    })
+    .put("/:id/entry", async (c) => {
+      const user = c.get("user") as SessionUser
+      const activity = store.getActivity(c.req.param("id"))
+      if (activity?.membersOnly && !isMember(user) && store.getResponse(activity.id, user.id) === null)
+        throw new HTTPException(403, { message: "This one is reserved to Soci" })
+      const body = await c.req.json().catch(() => null)
+      return c.json(store.joinSecretSanta(c.req.param("id"), user, body))
+    })
+    .delete("/:id/entry", (c) =>
+      c.json(store.withdrawSecretSanta(c.req.param("id"), (c.get("user") as SessionUser).id)),
+    )
+  app.route("/api/secret-santa", santa)
 
   const admin = new Hono<AppEnv>()
     .use(requireUser((u) => u.isAdmin))
@@ -270,6 +334,71 @@ export function createApp({ store, session }: { store: Store; session: Middlewar
     .post("/presentations/:id/reset", (c) => {
       store.resetPresentation(c.req.param("id"))
       return c.json(store.getLeaderboard(c.req.param("id")))
+    })
+    .get("/secret-santa/:id", (c) => c.json(store.getSecretSantaAdmin(c.req.param("id"))))
+    .patch("/secret-santa/:id/assignments", async (c) =>
+      c.json(
+        store.updateSecretSantaAssignments(
+          c.req.param("id"),
+          c.get("user") as SessionUser,
+          await parseBody(c, santaAssignments),
+        ),
+      ),
+    )
+    .patch("/secret-santa/:id/participants/:userId/confirmation", async (c) =>
+      c.json(
+        store.updateSecretSantaConfirmation(
+          c.req.param("id"),
+          c.req.param("userId"),
+          c.get("user") as SessionUser,
+          await parseBody(c, santaConfirmation),
+        ),
+      ),
+    )
+    .post("/secret-santa/:id/participants/:userId/readmit", async (c) =>
+      c.json(
+        store.readmitSecretSantaParticipant(
+          c.req.param("id"),
+          c.req.param("userId"),
+          c.get("user") as SessionUser,
+          await parseBody(c, santaReadmission),
+        ),
+      ),
+    )
+    .patch("/secret-santa/:id/participants/:userId/entry", async (c) =>
+      c.json(
+        store.updateSecretSantaEntry(
+          c.req.param("id"),
+          c.req.param("userId"),
+          c.get("user") as SessionUser,
+          await parseBody(c, santaEntryEdit),
+        ),
+      ),
+    )
+    .post("/secret-santa/:id/draw", (c) => {
+      store.drawSecretSanta(c.req.param("id"), c.get("user") as SessionUser)
+      return c.json(store.getSecretSantaAdmin(c.req.param("id")))
+    })
+    .post("/secret-santa/:id/undo-draw", (c) =>
+      c.json(store.undoSecretSantaDraw(c.req.param("id"), c.get("user") as SessionUser)),
+    )
+    .post("/secret-santa/:id/gadget-draw", (c) => {
+      store.drawSecretSantaGadget(c.req.param("id"))
+      return c.json(store.getSecretSantaAdmin(c.req.param("id")))
+    })
+    .delete("/secret-santa/:id/participants/:userId", async (c) =>
+      c.json(
+        store.removeSecretSantaParticipant(
+          c.req.param("id"),
+          c.req.param("userId"),
+          c.get("user") as SessionUser,
+          await parseBody(c, santaRemoval),
+        ),
+      ),
+    )
+    .put("/theme", async (c) => {
+      const body = await parseBody(c, themeBody)
+      return c.json({ christmas: store.setTheme(body.christmas ? "christmas" : "default") === "christmas" })
     })
     .get("/api-key", (c) => c.json({ apiKey: store.getApiKey() }))
     .post("/api-key", (c) => c.json({ apiKey: store.regenerateApiKey() }))
