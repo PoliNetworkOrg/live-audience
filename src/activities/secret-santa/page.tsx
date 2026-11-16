@@ -115,7 +115,7 @@ export function SecretSantaPage() {
           {user && <UserChip user={user} />}
         </div>
       </header>
-      <main className="relative z-10 mx-auto mt-6 mb-8 w-[calc(100%-2rem)] max-w-lg rounded-3xl border border-white bg-white px-4 py-6 shadow-sm sm:mt-0 sm:mb-0 sm:w-full sm:rounded-none sm:border-0 sm:bg-transparent sm:px-5 sm:pt-8 sm:pb-[46lvh] sm:shadow-none">
+      <main className="relative z-10 mx-auto mt-6 mb-8 w-[calc(100%-2rem)] max-w-lg rounded-3xl border border-white bg-white px-4 py-6 shadow-sm sm:px-6 sm:py-8">
         {content}
       </main>
     </div>
@@ -154,7 +154,7 @@ function SignedOut() {
       <h1 className="text-3xl font-semibold tracking-tight text-balance sm:text-5xl">
         Qualcuno in PoliNetwork ha un regalo per te
       </h1>
-      <p className="text-pretty" style={{ color: XMAS.muted }}>
+      <p className="leading-relaxed text-pretty" style={{ color: XMAS.muted }}>
         Accedi con il tuo account PoliNetwork per scrivere la tua letterina e scoprire chi devi sorprendere.
       </p>
       <a
@@ -716,7 +716,7 @@ function Hero({ santa, now }: { santa: SecretSantaView; now: number }) {
         </p>
       )}
       {config.intro && (
-        <p className="mx-auto max-w-md text-pretty" style={{ color: XMAS.muted }}>
+        <p className="mx-auto max-w-md leading-relaxed text-pretty" style={{ color: XMAS.muted }}>
           {config.intro}
         </p>
       )}
@@ -910,7 +910,7 @@ function Letter({
     }
   }
   const area =
-    "block w-full resize-none bg-transparent px-1 text-[17px] outline-none placeholder:text-slate-400 focus-visible:bg-sky-50"
+    "block w-full resize-none bg-transparent px-1 text-[17px] outline-none placeholder:text-slate-500 focus-visible:bg-sky-50"
   return (
     <Paper>
       <Stamp
