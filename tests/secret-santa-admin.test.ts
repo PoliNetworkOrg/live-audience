@@ -70,7 +70,7 @@ describe("Secret Santa organizer controls", () => {
     const path = join(directory, "live.db")
     try {
       const old = openDatabase(path)
-      old.exec("DROP TABLE secret_santa_admin_actions; PRAGMA user_version = 2;")
+      old.exec("DROP TABLE secret_santa_admin_actions; PRAGMA user_version = 4;")
       const store = new Store(old)
       const activity = store.createActivity({ type: secretSanta.type, title: "Existing", slug: "existing" })
       store.updateActivity(activity.id, { config: { ...secretSanta.defaultConfig(), visible: true } })

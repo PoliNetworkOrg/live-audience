@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react"
+import { useState } from "react"
+import { Hint, Question, Saved, ShownAs, SubmitButton, Verdict } from "../../client/audience-ui.tsx"
 import { Field, Textarea } from "../../client/ui.tsx"
 import { defineActivityUI } from "../ui-types.ts"
 import { type WheelConfig, type WheelResponse, type WheelResults, wheel } from "./definition.ts"
@@ -13,72 +14,64 @@ function Editor({ config, onChange }: { config: WheelConfig; onChange: (config: 
 
 function Audience({
   config,
+  me,
   response,
   open,
   submit,
 }: {
   config: WheelConfig
+  me: { name: string }
   response: WheelResponse | null
   open: boolean
   submit: (response: WheelResponse) => Promise<void>
 }) {
-  const [name, setName] = useState(response?.name ?? "")
   const [saving, setSaving] = useState(false)
-  useEffect(() => setName(response?.name ?? ""), [response])
-  const parsed = wheel.responseSchema(config).safeParse({ name })
-  const send = async () => {
-    if (!open || saving || !parsed.success) return
+  const join = async () => {
+    if (!open || saving || response) return
     setSaving(true)
     try {
-      await submit(parsed.data)
+      await submit({})
     } catch {
-      /* The audience page displays submission errors; keep the name for retry. */
+      /* The audience page displays submission errors. */
     } finally {
       setSaving(false)
     }
   }
   return (
-    <div className="space-y-5">
-      <h2 className="text-2xl font-semibold text-white">{config.prompt}</h2>
-      <label className="block space-y-2">
-        <span className="text-sm text-sky-100">Your name (shown on the presentation)</span>
-        <input
-          value={name}
-          onChange={(event) => setName(event.target.value)}
-          maxLength={80}
-          autoComplete="name"
-          disabled={!open || saving}
-          className="w-full rounded-2xl border border-white/20 bg-white/10 px-5 py-4 text-lg text-white outline-none focus:border-sky-300 disabled:opacity-60"
-        />
-      </label>
-      {open && (
-        <button
-          type="button"
-          disabled={!parsed.success || parsed.data.name === response?.name || saving}
-          onClick={() => void send()}
-          className="w-full rounded-2xl bg-white px-5 py-4 text-lg font-semibold text-brand-950 disabled:opacity-40"
-        >
-          {saving ? "Sending…" : response ? "Update name" : "Join the wheel"}
-        </button>
+    <div className="space-y-3 tall:space-y-4">
+      <Question>{config.prompt}</Question>
+      <ShownAs name={me.name} />
+      {open && !response && (
+        <SubmitButton disabled={saving} onClick={() => void join()}>
+          {saving ? "Joining…" : "Join the wheel"}
+        </SubmitButton>
       )}
-      <p className="text-center text-sm text-sky-100/70">
-        {!open
-          ? response
-            ? "Entries are closed. You're on the wheel!"
-            : "Entries are closed."
-          : response
-            ? "You're on the wheel ✓ You can update your name until entries close."
-            : "One entry per person."}
-      </p>
+      {!open ? (
+        response ? (
+          <Verdict tone="info" icon="eye" title="You're on the wheel">
+            Fingers crossed 🤞 Watch the screen while it spins.
+          </Verdict>
+        ) : (
+          <Verdict tone="info" icon="hourglass" title="Too late!">
+            Entries are closed: the wheel spins without you this time.
+          </Verdict>
+        )
+      ) : response ? (
+        <Saved id={response}>You're in. Good luck!</Saved>
+      ) : (
+        <Hint className="text-center">One entry per person.</Hint>
+      )}
     </div>
   )
 }
 
 function Results({ results }: { config: WheelConfig; results: WheelResults }) {
   return (
-    <div className="space-y-2">
-      <p className="text-sm text-slate-500">{results.totalParticipants} participants</p>
-      <ol className="max-h-80 list-decimal space-y-1 overflow-auto pl-5 text-sm">
+    <div className="space-y-3">
+      <p className="text-sm text-slate-500">
+        <b className="font-display text-lg font-medium text-pn">{results.totalParticipants}</b> participants
+      </p>
+      <ol className="max-h-80 list-decimal space-y-1.5 overflow-auto pl-6 text-sm text-slate-700 marker:font-display marker:text-slate-400">
         {results.names.map((name, index) => (
           // biome-ignore lint/suspicious/noArrayIndexKey: equal display names are separate participants
           <li key={index} className="break-words">

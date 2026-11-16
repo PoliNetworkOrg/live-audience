@@ -8,6 +8,8 @@
  *   await live.close()                  // stop accepting answers, keep it on stage
  *   await live.clear()                  // back to the idle screen
  *   live.onResults("dinner-poll", (r) => draw(r.results))   // live updates
+ *   live.onLeaderboard((board) => drawPodium(board.leaderboard)) // points of the running presentation
+ *   live.onAudience(({ connected, answered }) => show(connected, answered)) // who is here, who answered
  *
  * Slide integration: mark slides with `data-live="<slug>"` (and optionally
  * `data-live-status="closed"`), or `data-live="clear"`, then call `live.applySlide(slideElement)`
@@ -68,6 +70,29 @@ export class LiveAudience {
     return this.request("/stage/clear", { method: "POST" })
   }
 
+  /** Starts a presentation: phones show its leaderboard between activities. */
+  startPresentation(slug) {
+    return this.request("/stage/presentation", { body: { presentation: slug } })
+  }
+
+  /** Ends the running presentation. */
+  endPresentation() {
+    return this.request("/stage/presentation", { body: { presentation: null } })
+  }
+
+  /** `{ id, slug, title, leaderboard: [{ rank, name, points }] }`, best first. */
+  leaderboard(slug) {
+    return this.request(`/presentations/${encodeURIComponent(slug)}/leaderboard`)
+  }
+
+  /**
+   * `{ connected, answered, activity }`: people with the audience page open, and how many of them
+   * answered the activity on stage (`activity` is its slug, null with nothing on stage).
+   */
+  audience() {
+    return this.request("/audience")
+  }
+
   /** Every activity, with its config (e.g. a poll's question and options). */
   activities() {
     return this.request("/activities")
@@ -102,6 +127,23 @@ export class LiveAudience {
    */
   onStage(callback) {
     return this.#listen("", { stage: callback })
+  }
+
+  /**
+   * Calls `callback` with the running presentation's leaderboard now and whenever points change.
+   * @returns {() => void} stops listening
+   */
+  onLeaderboard(callback) {
+    return this.#listen("", { leaderboard: callback })
+  }
+
+  /**
+   * Calls `callback` with `{ connected, answered, activity }` now and whenever people join, leave
+   * or answer. See `audience()`.
+   * @returns {() => void} stops listening
+   */
+  onAudience(callback) {
+    return this.#listen("", { audience: callback })
   }
 
   /** Applies a slide's `data-live` / `data-live-status` attributes. See the top of this file. */

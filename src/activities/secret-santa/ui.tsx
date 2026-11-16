@@ -1,7 +1,6 @@
-import type { ReactNode } from "react"
 import { Link } from "wouter"
 import { useApi } from "../../client/api.ts"
-import { Field, Input, Textarea } from "../../client/ui.tsx"
+import { Field, Input, Textarea, Toggle } from "../../client/ui.tsx"
 import { defineActivityUI } from "../ui-types.ts"
 import { SecretSantaAdmin } from "./admin.tsx"
 import { Snowfall, StringLights, TreeIllustration, XMAS } from "./decorations.tsx"
@@ -29,16 +28,21 @@ function Editor({
   return (
     <div className="space-y-4">
       <p className="text-sm text-slate-500">
-        Secret Santa never goes on stage: it shows up on the home page for anyone signed in, Soci or not,
-        until you hide it. Gifts are handed over in person.
+        Secret Santa never goes on stage and never scores points: it shows up on the home page for anyone
+        signed in (only Soci with "Soci only" on) until you hide it. Gifts are handed over in person.
       </p>
-      <div className="space-y-2">
-        <Checkbox checked={config.visible} onChange={(visible) => set({ visible })}>
-          Show on the home page
-        </Checkbox>
-        <Checkbox checked={config.signupsOpen} onChange={(signupsOpen) => set({ signupsOpen })}>
-          Sign-ups open (untick to close them early; they also close at the date below and with the draw)
-        </Checkbox>
+      <div className="grid gap-x-4 gap-y-4 sm:grid-cols-2">
+        <Toggle
+          label="Show on the home page"
+          checked={config.visible}
+          onChange={(visible) => set({ visible })}
+        />
+        <Toggle
+          label="Sign-ups open"
+          hint="Off: close them early. They also close at the date below and with the draw."
+          checked={config.signupsOpen}
+          onChange={(signupsOpen) => set({ signupsOpen })}
+        />
       </div>
       <Field label="Intro">
         <Textarea value={config.intro} maxLength={600} onChange={(e) => set({ intro: e.target.value })} />
@@ -81,13 +85,13 @@ function Editor({
           <Input value={config.budget} maxLength={60} onChange={(e) => set({ budget: e.target.value })} />
         </Field>
       </div>
-      <hr className="border-slate-100" />
-      <Checkbox checked={config.gadget.enabled} onChange={(enabled) => setGadget({ enabled })}>
-        Raccogli adesioni per {GADGET_NAME}
-      </Checkbox>
-      <p className="text-xs text-slate-500">
-        Per ora raccogliamo solo le adesioni al gadget. L'estrazione è sospesa.
-      </p>
+      <hr className="border-t-[1.5px] border-white" />
+      <Toggle
+        label={`Raccogli adesioni per ${GADGET_NAME}`}
+        hint="Per ora raccogliamo solo le adesioni al gadget. L'estrazione è sospesa."
+        checked={config.gadget.enabled}
+        onChange={(enabled) => setGadget({ enabled })}
+      />
     </div>
   )
 }
@@ -104,28 +108,6 @@ function fromLocalInput(value: string) {
   return value ? new Date(value).toISOString() : ""
 }
 
-function Checkbox({
-  checked,
-  onChange,
-  children,
-}: {
-  checked: boolean
-  onChange: (checked: boolean) => void
-  children: ReactNode
-}) {
-  return (
-    <label className="flex items-center gap-2 text-sm text-slate-700">
-      <input
-        type="checkbox"
-        checked={checked}
-        onChange={(e) => onChange(e.target.checked)}
-        className="size-4 accent-blue-600"
-      />
-      {children}
-    </label>
-  )
-}
-
 function Results({ config, results }: { config: SecretSantaConfig; results: SecretSantaResults }) {
   return (
     <ul className="space-y-1 text-sm">
@@ -139,9 +121,9 @@ function Results({ config, results }: { config: SecretSantaConfig; results: Secr
 /** Shown only if an admin puts it on stage anyway: everything happens on the home page. */
 function Audience() {
   return (
-    <p className="text-center text-sky-100/80">
+    <p className="text-center font-headline text-slate-600">
       Il Secret Santa ha una pagina tutta sua:{" "}
-      <Link href={SECRET_SANTA_PATH} className="underline">
+      <Link href={SECRET_SANTA_PATH} className="font-medium text-pn underline underline-offset-4">
         aprila qui
       </Link>
     </p>
@@ -165,14 +147,46 @@ export function useSecretSantas(): SecretSantaView[] | null {
 }
 
 /** Small festive invitations to the Secret Santa page, one per visible Secret Santa. */
-export function SecretSantaTeasers({ santas }: { santas: SecretSantaView[] }) {
+/**
+ * `compact` while an activity is live: one short line, so the activity still fits one phone screen.
+ */
+export function SecretSantaTeasers({
+  santas,
+  compact = false,
+}: {
+  santas: SecretSantaView[]
+  compact?: boolean
+}) {
+  if (compact) {
+    return (
+      <div className="space-y-2">
+        {santas.map((santa) => (
+          <Link
+            key={santa.id}
+            href={SECRET_SANTA_PATH}
+            className="group flex items-center gap-2 rounded-full border-[1.5px] border-white bg-white px-4 py-1.5 text-sm shadow-[0_12px_30px_-24px_rgb(17_86_174/0.45)] transition active:scale-[0.98]"
+            style={{ color: XMAS.navy }}
+          >
+            <span
+              className="shrink-0 text-[0.7rem] font-semibold tracking-[0.2em] uppercase"
+              style={{ color: XMAS.blue }}
+            >
+              Secret Santa
+            </span>
+            <span className="min-w-0 flex-1 truncate font-medium">{santa.title}</span>
+            <ArrowIcon className="size-4 shrink-0 transition-transform duration-200 ease-out group-hover:translate-x-0.5" />
+          </Link>
+        ))}
+      </div>
+    )
+  }
   return (
     <div className="space-y-4">
       {santas.map((santa) => (
         <Link
           key={santa.id}
           href={SECRET_SANTA_PATH}
-          className="animate-pop-in group relative block overflow-hidden rounded-3xl bg-white px-5 pt-12 pb-5 shadow-xl transition active:scale-[0.98]"
+          className="animate-pop-in group relative block overflow-hidden rounded-[20px] border-[1.5px] border-white bg-white px-5 pt-12 pb-5 shadow-[0_30px_60px_-36px_rgb(17_86_174/0.45)] transition active:scale-[0.98]"
           style={{ color: XMAS.navy }}
         >
           <StringLights className="absolute inset-x-0 top-0" />
@@ -196,23 +210,29 @@ export function SecretSantaTeasers({ santas }: { santas: SecretSantaView[] }) {
               className="flex size-10 shrink-0 items-center justify-center rounded-full text-white transition-transform duration-200 ease-out group-hover:translate-x-1"
               style={{ background: XMAS.blue }}
             >
-              <svg
-                aria-hidden
-                viewBox="0 0 24 24"
-                className="size-5"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M5 12h14M13 6l6 6-6 6" />
-              </svg>
+              <ArrowIcon className="size-5" />
             </span>
           </span>
         </Link>
       ))}
     </div>
+  )
+}
+
+function ArrowIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      aria-hidden
+      viewBox="0 0 24 24"
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M5 12h14M13 6l6 6-6 6" />
+    </svg>
   )
 }
 

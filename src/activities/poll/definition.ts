@@ -1,5 +1,5 @@
 import { z } from "zod"
-import { defineActivity } from "../types.ts"
+import { defineActivity, withoutBlankItems } from "../types.ts"
 
 const optionSchema = z.object({
   id: z.string().min(1).max(40),
@@ -8,7 +8,8 @@ const optionSchema = z.object({
 
 export const pollConfigSchema = z.object({
   question: z.string().trim().min(1).max(300),
-  options: z.array(optionSchema).min(2).max(12),
+  /** Options left without a label are dropped. */
+  options: withoutBlankItems(z.array(optionSchema).min(2).max(12), "label"),
   /** How many options each person may pick. 1 = classic single choice. */
   maxChoices: z.number().int().min(1).max(12),
 })

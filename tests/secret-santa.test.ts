@@ -123,6 +123,66 @@ describe("secret santa", () => {
     expect((await join("b", " ")).status).toBe(400)
   })
 
+  it("takes Soci alone when marked Soci only", async () => {
+    const { call, join, activity, store } = setup()
+    store.updateActivity(activity.id, { membersOnly: true })
+    expect((await call("/api/secret-santa", "a")).json).toEqual([])
+    expect((await join("a")).status).toBe(403)
+    expect((await call("/api/secret-santa", "socio")).json).toHaveLength(1)
+    expect((await join("socio")).status).toBe(200)
+  })
+
+  it("keeps people who already joined when Soci only is switched on later", async () => {
+    const { call, join, activity, store } = setup()
+    for (const id of ["a", "b", "socio"]) expect((await join(id)).status).toBe(200)
+    store.drawSecretSanta(activity.id)
+    store.updateActivity(activity.id, { membersOnly: true })
+    const [view] = (await call("/api/secret-santa", "a")).json
+    expect(view).toMatchObject({ id: activity.id, drawn: true })
+    expect(view.match).not.toBeNull()
+    expect((await call(`/api/secret-santa/${activity.id}/confirm-gift`, "a", "POST", {})).status).toBe(200)
+    // Newcomers who are not Soci still stay out.
+    expect((await call("/api/secret-santa", "c")).json).toEqual([])
+    expect((await join("c")).status).toBe(403)
+  })
+
+  it("never belongs to a presentation, so a presentation reset leaves it alone", () => {
+    const db = openDatabase(":memory:")
+    const store = new Store(db)
+    const presentation = store.createPresentation({ title: "Assemblea", slug: "assemblea" })
+    const santa = store.createActivity({
+      type: "secret-santa",
+      title: "Natale 2026",
+      slug: "santa",
+      presentationId: presentation.id,
+    })
+    expect(santa).toMatchObject({ presentationId: null, countsToLeaderboard: false })
+    expect(
+      store.updateActivity(santa.id, {
+        config: { ...(santa.config as object), visible: true },
+        presentationId: presentation.id,
+        countsToLeaderboard: true,
+      }),
+    ).toMatchObject({ presentationId: null, countsToLeaderboard: false })
+    // A poll switched to Secret Santa leaves its presentation too.
+    const poll = store.createActivity({
+      type: "poll",
+      title: "Poll",
+      slug: "poll",
+      presentationId: presentation.id,
+    })
+    expect(store.updateActivity(poll.id, { type: "secret-santa" }).presentationId).toBeNull()
+
+    for (const id of ["a", "b"])
+      store.joinSecretSanta(santa.id, people[id] as SessionUser, entry(`likes of ${id}`))
+    store.drawSecretSanta(santa.id)
+    // One grouped before this rule (straight in the database) survives the presentation's reset.
+    db.prepare("UPDATE activities SET presentation_id = ? WHERE id = ?").run(presentation.id, santa.id)
+    store.resetPresentation(presentation.id)
+    expect(store.listResponses(santa.id)).toHaveLength(2)
+    expect(store.listSecretSantas("a")[0]).toMatchObject({ drawn: true, participants: 2 })
+  })
+
   it("shows each person only their own match and keeps pairings out of the API key", async () => {
     const { call, join, activity, store } = setup()
     for (const id of ["a", "b", "c", "d"]) await join(id)

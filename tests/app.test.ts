@@ -1,5 +1,6 @@
 import type { MiddlewareHandler } from "hono"
 import { beforeEach, describe, expect, it } from "vitest"
+import { wheel } from "../src/activities/wheel/definition.ts"
 import { createApp } from "../src/server/app.ts"
 import type { AuthVariables, SessionUser } from "../src/server/auth.ts"
 import { openDatabase } from "../src/server/db.ts"
@@ -64,7 +65,7 @@ describe("a word cloud, driven by a presentation", () => {
   it("validates free answers, replaces them, publishes counts and supports close/reset", async () => {
     const created = await call("/api/admin/activities", {
       as: "admin",
-      body: { type: "word-cloud", title: "Gadgets", slug: "gadget-ideas" },
+      body: { type: "word-cloud", title: "Gadgets", slug: "gadget-ideas", membersOnly: true },
     })
     expect(created.status).toBe(201)
     const { id } = await created.json()
@@ -110,45 +111,56 @@ describe("a word cloud, driven by a presentation", () => {
     })
     await call("/api/v1/stage/close", { key, method: "POST" })
     expect((await respond("socio", ["felpa"])).status).toBe(409)
+    const answers = async () =>
+      (await (await call("/api/admin/activities", { as: "admin" })).json())[0].answers
+    expect(await answers()).toBe(2)
     await call("/api/v1/activities/gadget-ideas/reset", { key, method: "POST" })
     expect(await readResults()).toEqual({ prompt: "Your ideas?", totalRespondents: 0, words: [] })
+    expect(await answers()).toBe(0)
   })
 })
 
 describe("wheel entries", () => {
-  it("collects one display name per member, preserves equal names and closes entries", async () => {
+  it("puts each member on the wheel once, under their IdP name, and closes entries", async () => {
     const created = await call("/api/admin/activities", {
       as: "admin",
-      body: { type: "wheel", title: "Draw", slug: "fortune-wheel" },
+      body: { type: "wheel", title: "Draw", slug: "fortune-wheel", membersOnly: true },
     })
     expect(created.status).toBe(201)
     const { id } = await created.json()
     const key = store.getApiKey()
-    const join = (as: string, name: string) =>
-      call("/api/audience/respond", { as, body: { activityId: id, response: { name } } })
-    expect((await join("socio", "Sara")).status).toBe(409)
+    const join = (as: string, response: unknown = {}) =>
+      call("/api/audience/respond", { as, body: { activityId: id, response } })
+    expect((await join("socio")).status).toBe(409)
     await call("/api/v1/stage", { key, body: { activity: "fortune-wheel" } })
-    expect((await join("guest", "Nico")).status).toBe(403)
-    for (const name of ["  ", "x".repeat(81)]) expect((await join("socio", name)).status).toBe(400)
-    expect((await join("socio", "  Sara   B. ")).status).toBe(200)
-    expect((await join("socio", "Display name")).status).toBe(200)
-    expect((await join("admin", "Display name")).status).toBe(200)
+    expect((await join("guest")).status).toBe(403)
+    expect((await join("socio", { name: "Typed name" })).status).toBe(200) // the typed name is ignored
+    expect((await join("socio")).status).toBe(200) // joining twice is still one entry
+    expect((await join("admin")).status).toBe(200)
     const results = await (await call("/api/v1/activities/fortune-wheel/results", { key })).json()
     expect(results.results).toEqual({
-      prompt: "Enter your name to join the wheel",
+      prompt: "Join the wheel for a chance to win",
       totalParticipants: 2,
-      names: ["Display name", "Display name"],
+      names: expect.arrayContaining(["Sara", "Ada"]),
     })
-    expect(JSON.stringify(results)).not.toContain("Sara")
+    expect(JSON.stringify(results)).not.toContain("Typed name")
     expect(JSON.stringify(results)).not.toContain("userId")
     await call("/api/v1/stage/close", { key, method: "POST" })
-    expect((await join("socio", "Late change")).status).toBe(409)
+    expect((await join("socio")).status).toBe(409)
     expect(await (await call("/api/audience/stage", { as: "socio" })).json()).toMatchObject({
       status: "closed",
-      myResponse: { name: "Display name" },
+      myResponse: {},
     })
     await call("/api/v1/activities/fortune-wheel/reset", { key, method: "POST" })
     expect(store.getResults(id).results).toMatchObject({ totalParticipants: 0, names: [] })
+  })
+
+  it("keeps people with the same name as separate entries", () => {
+    const entry = (userId: string) => ({ userId, userName: "Same name", response: {}, updatedAt: 0 })
+    expect(wheel.aggregate({ prompt: "Join" }, [entry("one"), entry("two")]).names).toEqual([
+      "Same name",
+      "Same name",
+    ])
   })
 })
 
@@ -159,10 +171,26 @@ describe("access", () => {
     expect((await call("/api/admin/activities", { as: "admin" })).status).toBe(200)
   })
 
-  it("keeps the audience to members", async () => {
+  it("lets anyone signed in play, and only Soci answer activities marked Soci only", async () => {
     expect((await call("/api/audience/stage")).status).toBe(401)
-    expect((await call("/api/audience/stage", { as: "guest" })).status).toBe(403)
-    expect((await call("/api/audience/stage", { as: "socio" })).status).toBe(200)
+    expect((await call("/api/audience/stage", { as: "guest" })).status).toBe(200)
+    const { id } = await createPoll()
+    const key = store.getApiKey()
+    await call("/api/v1/stage", { key, body: { activity: "dinner" } })
+    const vote = (as: string) =>
+      call("/api/audience/respond", { as, body: { activityId: id, response: { choices: ["a"] } } })
+    // Open to everyone by default.
+    expect(await (await call("/api/audience/stage", { as: "guest" })).json()).toMatchObject({
+      activity: { id, membersOnly: false, countsToLeaderboard: true },
+    })
+    expect((await vote("guest")).status).toBe(200)
+    await call("/api/admin/activities/dinner", { as: "admin", method: "PATCH", body: { membersOnly: true } })
+    expect(await (await call("/api/audience/stage", { as: "guest" })).json()).toMatchObject({
+      activity: { id, membersOnly: true },
+    })
+    expect((await vote("guest")).status).toBe(403)
+    expect((await vote("socio")).status).toBe(200)
+    expect((await vote("admin")).status).toBe(200)
   })
 
   it("requires the current API key", async () => {
@@ -229,6 +257,65 @@ describe("a poll, driven by a presentation", () => {
     })
     expect(res.status).toBe(400)
     expect((await res.json()).details).toBeInstanceOf(Array)
+  })
+
+  it("drops poll options left blank", async () => {
+    await call("/api/admin/activities", { as: "admin", body: { type: "poll", title: "X", slug: "x" } })
+    const res = await call("/api/admin/activities/x", {
+      as: "admin",
+      method: "PATCH",
+      body: {
+        config: {
+          question: "Q",
+          options: [
+            { id: "a", label: "Yes" },
+            { id: "b", label: "  " },
+            { id: "c", label: " No " },
+          ],
+          maxChoices: 1,
+        },
+      },
+    })
+    expect(res.status).toBe(200)
+    expect((await res.json()).config.options).toEqual([
+      { id: "a", label: "Yes" },
+      { id: "c", label: "No" },
+    ])
+  })
+
+  it("changes the type of an activity without answers, off stage", async () => {
+    const { id } = await createPoll()
+    const key = store.getApiKey()
+    const patch = (body: unknown) =>
+      call(`/api/admin/activities/${id}`, { as: "admin", method: "PATCH", body })
+
+    expect((await patch({ type: "nope" })).status).toBe(400)
+    expect((await patch({ type: "word-cloud", config: { question: "Q" } })).status).toBe(400)
+
+    await call("/api/v1/stage", { key, body: { activity: "dinner" } })
+    expect((await patch({ type: "wheel" })).status).toBe(409) // on stage
+    await call("/api/audience/respond", {
+      as: "socio",
+      body: { activityId: id, response: { choices: ["a"] } },
+    })
+    await call("/api/v1/stage/clear", { key, method: "POST" })
+    expect((await patch({ type: "wheel" })).status).toBe(409) // has answers
+    expect(store.getActivity(id)).toMatchObject({ type: "poll" })
+
+    await call("/api/v1/activities/dinner/reset", { key, method: "POST" })
+    const changed = await patch({ type: "word-cloud", config: { prompt: "Ideas?", maxWords: 2 } })
+    expect(changed.status).toBe(200)
+    expect(await changed.json()).toMatchObject({
+      type: "word-cloud",
+      config: { prompt: "Ideas?", maxWords: 2 },
+    })
+    expect(store.getResults("dinner")).toMatchObject({ type: "word-cloud", results: { words: [] } })
+
+    // Without a config the new type starts from its default one.
+    expect(await (await patch({ type: "wheel" })).json()).toMatchObject({
+      type: "wheel",
+      config: wheel.defaultConfig(),
+    })
   })
 
   it("refuses duplicate or malformed slugs", async () => {
