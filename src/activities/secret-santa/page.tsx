@@ -94,12 +94,8 @@ export function SecretSantaPage() {
         style={{ background: `linear-gradient(to bottom, ${XMAS.ice}, oklch(92% 0.035 240))` }}
       >
         <FlyingSleigh />
-        <div className="opacity-20 sm:opacity-100">
-          <SnowyHills />
-        </div>
-        <div className="opacity-40 sm:opacity-100">
-          <Snowfall />
-        </div>
+        <SnowyHills />
+        <Snowfall />
       </div>
       <header className="relative z-10 pt-[env(safe-area-inset-top)]">
         <StringLights />
