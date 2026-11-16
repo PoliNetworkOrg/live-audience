@@ -70,7 +70,7 @@ export async function runSecretSantaJobs(store: Store, mailer: Mailer, publicUrl
   for (const mail of store.pendingSecretSantaMails()) {
     try {
       await mailer.sendSecretSanta({ ...mail, url })
-      store.markSecretSantaMailSent(mail.activityId, mail.userId)
+      store.markSecretSantaMailSent(mail.activityId, mail.userId, mail.drawnAt)
     } catch (error) {
       console.error(`[secret-santa] could not email ${mail.to}, will retry`, error)
     }

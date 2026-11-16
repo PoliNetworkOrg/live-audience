@@ -68,6 +68,42 @@ describe("gift confirmation and expiry", () => {
   })
   afterEach(() => vi.useRealTimers())
 
+  it("ignores acknowledgments from a draw reset during mail delivery", async () => {
+    const { store, activity, mailer } = setup()
+    const oldDraw = store.pendingSecretSantaMails()[0]?.drawnAt
+    mailer.sendSecretSanta.mockImplementationOnce(async () => {
+      store.undoSecretSantaDraw(activity.id)
+      vi.setSystemTime(Date.now() + 1000)
+      store.drawSecretSanta(activity.id)
+    })
+    await runSecretSantaJobs(store, mailer, "https://live.example")
+    expect(store.pendingSecretSantaMails()).toHaveLength(4)
+    expect(store.pendingSecretSantaMails()[0]?.drawnAt).not.toBe(oldDraw)
+    await runSecretSantaJobs(store, mailer, "https://live.example")
+    expect(store.pendingSecretSantaMails()).toEqual([])
+  })
+
+  it.each([true, false])("uses recorded confirmations for prototype-named users: %s", (confirm) => {
+    const { store, activity, view } = setup()
+    store.undoSecretSantaDraw(activity.id)
+    store.joinSecretSanta(
+      activity.id,
+      { id: "constructor", name: "Test participant", email: "test@example.test" },
+      { likes: "Books", dislikes: "", gadget: false },
+    )
+    store.drawSecretSanta(activity.id)
+    if (confirm) {
+      store.confirmSecretSantaGift(activity.id, "constructor")
+      expect(view("constructor").giftConfirmedAt).toBe(Date.now())
+    }
+    store.runSecretSantaConfirmationSchedule(Date.parse(due))
+    expect(
+      store.pendingSecretSantaStatusMails(Date.parse(due)).some((mail) => mail.userId === "constructor"),
+    ).toBe(!confirm)
+    store.runSecretSantaConfirmationSchedule(midnight)
+    expect(view("constructor").entry !== null).toBe(confirm)
+  })
+
   it("confirms only the signed-in participant, persists and is idempotent", async () => {
     const { app, activity, view, store, db } = setup()
     const url = `/api/secret-santa/${activity.id}/confirm-gift`

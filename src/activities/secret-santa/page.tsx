@@ -160,7 +160,17 @@ function SignedOut() {
 function SecretSantas() {
   const list = useApi<SecretSantaView[]>("/api/secret-santa")
   if (list.loading && !list.data) return <Spinner />
-  if (list.error) return <p className="text-center text-rose-700">{list.error.message}</p>
+  if (list.error)
+    return (
+      <div className="space-y-3 text-center">
+        <p role="alert" className="text-rose-700">
+          {list.error.message}
+        </p>
+        <button type="button" onClick={list.reload} className="underline">
+          Riprova
+        </button>
+      </div>
+    )
   if (!list.data?.length) {
     return (
       <div className="xmas-rise space-y-5 text-center">
@@ -178,12 +188,7 @@ function SecretSantas() {
   return (
     <div className="space-y-24">
       {list.data.map((santa) => (
-        <SantaExperience
-          key={santa.id}
-          santa={santa}
-          reload={list.reload}
-          onChange={(next) => list.setData((list.data ?? []).map((s) => (s.id === next.id ? next : s)))}
-        />
+        <SantaExperience key={santa.id} santa={santa} reload={list.reload} onChange={() => list.reload()} />
       ))}
     </div>
   )

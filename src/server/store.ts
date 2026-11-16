@@ -986,7 +986,7 @@ export class Store {
       throw new StoreError(409, "Non hai un regalo da confermare per questo giro")
     }
     const confirmed = this.getSetting<Record<string, number>>(`santa-confirmed:${activity.id}`) ?? {}
-    if (confirmed[userId] === undefined) {
+    if (!Object.hasOwn(confirmed, userId)) {
       const closesAt = confirmationClosesAt(config.confirmationDueAt)
       if (closesAt !== null && now >= closesAt)
         throw new StoreError(409, "Il termine per confermare il regalo è scaduto")
@@ -1737,7 +1737,7 @@ export class Store {
       if (!draw || closesAt === null || now < Date.parse(config.confirmationDueAt)) continue
       const confirmed = this.getSetting<Record<string, number>>(`santa-confirmed:${activity.id}`) ?? {}
       const missing = this.listResponses(activity.id).filter(
-        (r) => draw.assignments[r.userId] && confirmed[r.userId] === undefined,
+        (r) => draw.assignments[r.userId] && !Object.hasOwn(confirmed, r.userId),
       )
       if (now >= closesAt) {
         if (missing.length)
@@ -1775,7 +1775,7 @@ export class Store {
           if (
             to &&
             draw.assignments[userId] &&
-            confirmed[userId] === undefined &&
+            !Object.hasOwn(confirmed, userId) &&
             warning?.deadline === config.confirmationDueAt &&
             warning.sentAt === null
           ) {
@@ -1882,7 +1882,9 @@ export class Store {
     )
   }
 
-  markSecretSantaMailSent(activityId: string, userId: string) {
+  markSecretSantaMailSent(activityId: string, userId: string, drawnAt: number) {
+    const draw = this.getSetting<SecretSantaDraw>(`santa-draw:${activityId}`)
+    if (!draw || draw.drawnAt !== drawnAt) return
     const sent = this.getSetting<string[]>(`santa-mail:${activityId}`) ?? []
     if (!sent.includes(userId)) this.setSetting(`santa-mail:${activityId}`, [...sent, userId])
     this.events.emit("results", activityId)

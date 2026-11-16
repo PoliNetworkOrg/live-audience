@@ -131,7 +131,12 @@ export function SecretSantaAdmin({ activityId, config }: { activityId: string; c
       )
       focusAfterClose.current = STATUS_ID
     }
-  }, [latest, readmitting, editingEntry])
+    if (selected !== null && !latest.participants.some((p) => p.userId === selected)) {
+      setSelected(null)
+      setNotice("La persona selezionata non partecipa più a questo giro.")
+      focusAfterClose.current = STATUS_ID
+    }
+  }, [latest, readmitting, editingEntry, selected])
   useEffect(() => {
     if (!focusAfterClose.current || editingEntry || readmitting) return
     const target = document.getElementById(focusAfterClose.current) ?? document.getElementById(STATUS_ID)

@@ -174,15 +174,18 @@ function ChristmasSwitch() {
   const [on, setOn] = useState<boolean | null>(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [loadAttempt, setLoadAttempt] = useState(0)
+  // biome-ignore lint/correctness/useExhaustiveDependencies: loadAttempt retries the initial request
   useEffect(() => {
     let cancelled = false
+    setError(null)
     api<{ christmas: boolean }>("/api/theme")
       .then(({ christmas }) => !cancelled && setOn(christmas))
       .catch(() => !cancelled && setError("Could not load"))
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [loadAttempt])
 
   const toggle = async () => {
     if (on === null || saving) return
@@ -214,6 +217,15 @@ function ChristmasSwitch() {
         >
           {status}
         </span>
+      )}
+      {on === null && error && (
+        <button
+          type="button"
+          onClick={() => setLoadAttempt((attempt) => attempt + 1)}
+          className="text-xs underline"
+        >
+          Retry
+        </button>
       )}
       <button
         type="button"
