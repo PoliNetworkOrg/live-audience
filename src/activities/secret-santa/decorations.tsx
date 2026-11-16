@@ -18,7 +18,7 @@ export const XMAS = {
   frost: "oklch(90% 0.04 240)",
   ice: "oklch(97% 0.015 240)",
   white: "oklch(100% 0 0)",
-  muted: "oklch(46% 0.04 252)",
+  muted: "oklch(35% 0.04 252)",
   // …and Christmas gold, red and green are the accents.
   gold: "oklch(83% 0.14 85)",
   goldDark: "oklch(70% 0.14 75)",
@@ -77,7 +77,7 @@ const SNOW_LOGOS = Array.from({ length: 6 }, (_, i) => {
 })
 
 /** Three layers of flakes, with a few icy logos mixed into the full-page snowfall. */
-export function Snowfall({ fixed = true }: { fixed?: boolean }) {
+export function Snowfall({ fixed = true, fullPage = fixed }: { fixed?: boolean; fullPage?: boolean }) {
   return (
     <div
       aria-hidden
@@ -96,14 +96,14 @@ export function Snowfall({ fixed = true }: { fixed?: boolean }) {
               animationDuration: `${flake.duration}s`,
               animationDelay: `${flake.delay}s`,
               "--drift": `${flake.drift}px`,
-              "--fall": fixed ? "110vh" : "16rem",
+              "--fall": fullPage ? "110svh" : "16rem",
             } as CSSProperties
           }
         >
           <Flake size={flake.size} />
         </span>
       ))}
-      {fixed &&
+      {fullPage &&
         SNOW_LOGOS.map((logo, i) => (
           <span
             // biome-ignore lint/suspicious/noArrayIndexKey: static decoration
@@ -116,7 +116,7 @@ export function Snowfall({ fixed = true }: { fixed?: boolean }) {
                 animationDuration: `${logo.duration}s`,
                 animationDelay: `${logo.delay}s`,
                 "--drift": `${logo.drift}px`,
-                "--fall": "calc(100vh + 6rem)",
+                "--fall": "calc(100svh + 6rem)",
               } as CSSProperties
             }
           >
@@ -254,11 +254,11 @@ const TREES = [
  * stretch (they are just curves); trees and snowmen are fixed-size pieces placed on top, so nothing
  * is ever cut off. The page content scrolls over it on white cards.
  */
-export function SnowyHills() {
+export function SnowyHills({ fixed = true }: { fixed?: boolean }) {
   return (
     <div
       aria-hidden
-      className="pointer-events-none fixed inset-x-0 bottom-0 h-[46vh] min-h-72 overflow-hidden"
+      className={`pointer-events-none ${fixed ? "fixed" : "absolute"} inset-x-0 bottom-0 h-[46svh] min-h-36 overflow-hidden`}
     >
       <svg
         aria-hidden
@@ -342,9 +342,12 @@ function Sleigh({ className }: { className?: string }) {
 }
 
 /** Santa crossing the sky now and then, behind everything. Hidden for reduced motion. */
-export function FlyingSleigh() {
+export function FlyingSleigh({ fixed = true }: { fixed?: boolean }) {
   return (
-    <div aria-hidden className="pointer-events-none fixed inset-x-0 top-[14vh] h-24 overflow-hidden">
+    <div
+      aria-hidden
+      className={`pointer-events-none ${fixed ? "fixed" : "absolute"} inset-x-0 top-[14svh] h-24 overflow-hidden`}
+    >
       <div className="xmas-sleigh absolute top-0 left-0">
         <div className="xmas-sleigh-bob relative">
           <span className="absolute top-1/2 -left-24 h-px w-28 bg-gradient-to-r from-transparent to-amber-300/70" />
@@ -367,6 +370,25 @@ export function FlyingSleigh() {
 }
 
 // ---- illustrations -----------------------------------------------------------------------
+
+/** Keep scenery above mobile toolbars, without resizing it as the toolbars retract. */
+export function WinterBackdrop({ children }: { children?: ReactNode }) {
+  return (
+    <div aria-hidden className="pointer-events-none fixed inset-0 z-0 overflow-hidden bg-white">
+      <div
+        className="absolute inset-x-0 top-0 h-svh overflow-hidden"
+        style={{
+          background: `radial-gradient(70rem 32rem at 50% -8rem, oklch(62% 0.17 255 / 0.16), transparent 70%), linear-gradient(to bottom, ${XMAS.ice} 0%, oklch(95% 0.025 240) 55%, oklch(92% 0.035 240) 100%)`,
+        }}
+      >
+        <FlyingSleigh fixed={false} />
+        <SnowyHills fixed={false} />
+        <Snowfall fixed={false} fullPage />
+        {children}
+      </div>
+    </div>
+  )
+}
 
 export function TreeIllustration({ className }: { className?: string }) {
   return (

@@ -4,19 +4,17 @@ import { api, loginUrl, logout, type Me, useApi, useMe } from "../../client/api.
 import {
   Burst,
   Elf,
-  FlyingSleigh,
   GiftBox,
   Icon,
   type IconName,
   MysteryGift,
-  Snowfall,
   SnowPuff,
-  SnowyHills,
   Sparkle,
   Sparks,
   Stamp,
   StringLights,
   TreeIllustration,
+  WinterBackdrop,
   XMAS,
 } from "./decorations.tsx"
 import {
@@ -36,6 +34,8 @@ import {
 export const SECRET_SANTA_PATH = "/secret-santa"
 const PAPER = XMAS.white
 const INK = XMAS.navy
+const SECONDARY_ACTION =
+  "inline-flex min-h-11 items-center justify-center rounded-full border border-slate-300 bg-white px-5 py-2.5 text-sm font-semibold shadow-sm transition-colors hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-blue-600 disabled:cursor-not-allowed disabled:opacity-60"
 
 /** The current time, refreshed every `intervalMs`. */
 function useNow(intervalMs = 1000) {
@@ -84,12 +84,10 @@ export function SecretSantaPage() {
       className="relative min-h-dvh overflow-x-hidden"
       style={{
         color: INK,
-        background: `radial-gradient(70rem 32rem at 50% -8rem, oklch(62% 0.17 255 / 0.16), transparent 70%), linear-gradient(to bottom, ${XMAS.ice} 0%, oklch(95% 0.025 240) 55%, oklch(92% 0.035 240) 100%)`,
+        background: XMAS.ice,
       }}
     >
-      <FlyingSleigh />
-      <SnowyHills />
-      <Snowfall />
+      <WinterBackdrop />
       <header className="relative z-10 pt-[env(safe-area-inset-top)]">
         <StringLights />
         <div className="mx-auto flex max-w-2xl items-center justify-between gap-3 px-5 pt-5">
@@ -106,7 +104,7 @@ export function SecretSantaPage() {
           {user && <UserChip user={user} />}
         </div>
       </header>
-      <main className="relative z-10 mx-auto w-full max-w-lg px-5 pt-8 pb-[46vh]">{content}</main>
+      <main className="relative z-10 mx-auto w-full max-w-lg px-5 pt-8 pb-8 sm:pb-[46svh]">{content}</main>
     </div>
   )
 }
@@ -137,18 +135,23 @@ function UserChip({ user }: { user: Me }) {
 
 function SignedOut() {
   return (
-    <div className="xmas-rise space-y-6 text-center">
-      <SantaLogo className="mx-auto h-44 w-auto sm:h-52" />
-      <Eyebrow>Secret Santa</Eyebrow>
-      <h1 className="text-4xl font-semibold tracking-tight text-balance sm:text-5xl">
-        Qualcuno in PoliNetwork ha un regalo per te
-      </h1>
-      <p className="text-pretty" style={{ color: XMAS.muted }}>
-        Accedi con il tuo account PoliNetwork per scrivere la tua letterina e scoprire chi devi sorprendere.
-      </p>
+    <div className="xmas-rise space-y-4 text-center sm:space-y-6">
+      <SantaLogo className="mx-auto h-32 w-auto sm:h-52" />
+      <div className="space-y-4 sm:space-y-6">
+        <Eyebrow>Secret Santa</Eyebrow>
+        <h1 className="text-3xl font-semibold tracking-tight text-balance sm:text-5xl">
+          Qualcuno in PoliNetwork ha un regalo per te
+        </h1>
+        <p
+          className="rounded-2xl border border-sky-200 bg-white px-4 py-3 leading-relaxed text-pretty shadow-sm"
+          style={{ color: XMAS.muted }}
+        >
+          Accedi con il tuo account PoliNetwork per scrivere la tua letterina e scoprire chi devi sorprendere.
+        </p>
+      </div>
       <a
         href={loginUrl(`${SECRET_SANTA_PATH}${window.location.search}${window.location.hash}`)}
-        className="inline-flex w-full items-center justify-center rounded-full px-6 py-4 text-lg font-semibold text-white shadow-lg transition active:scale-[0.97]"
+        className="inline-flex min-h-12 w-full items-center justify-center rounded-full px-4 py-3 text-base font-semibold text-white shadow-lg transition active:scale-[0.97] sm:px-6 sm:py-4 sm:text-lg"
         style={{ background: XMAS.blue }}
       >
         Accedi con PoliNetwork
@@ -166,7 +169,7 @@ function SecretSantas() {
         <p role="alert" className="text-rose-700">
           {list.error.message}
         </p>
-        <button type="button" onClick={list.reload} className="underline">
+        <button type="button" onClick={list.reload} className={SECONDARY_ACTION}>
           Riprova
         </button>
       </div>
@@ -179,7 +182,7 @@ function SecretSantas() {
         <p style={{ color: XMAS.muted }}>
           Gli elfi stanno ancora preparando tutto. Torna più vicino a Natale!
         </p>
-        <Link href="/" className="inline-block text-sm underline" style={{ color: XMAS.blue }}>
+        <Link href="/" className={SECONDARY_ACTION} style={{ color: XMAS.blue }}>
           Torna a PoliNetwork Live
         </Link>
       </div>
@@ -188,7 +191,15 @@ function SecretSantas() {
   return (
     <div className="space-y-24">
       {list.data.map((santa) => (
-        <SantaExperience key={santa.id} santa={santa} reload={list.reload} onChange={() => list.reload()} />
+        <SantaExperience
+          key={santa.id}
+          santa={santa}
+          reload={list.reload}
+          onChange={(updated) => {
+            list.setData((list.data ?? []).map((item) => (item.id === updated.id ? updated : item)))
+            list.reload()
+          }}
+        />
       ))}
     </div>
   )
@@ -372,12 +383,12 @@ function SantaExperience({
         </p>
       )}
       {entry && !editing && (
-        <div className="flex justify-center gap-6 text-sm">
+        <div className="flex flex-wrap justify-center gap-3 text-sm">
           {!santa.drawn && (
             <button
               type="button"
               onClick={() => setEditing(true)}
-              className="underline underline-offset-4"
+              className={SECONDARY_ACTION}
               style={{ color: XMAS.blue }}
             >
               Modifica la letterina
@@ -390,8 +401,8 @@ function SantaExperience({
               withdrawalDialog.current?.showModal()
               withdrawalCancel.current?.focus()
             }}
-            className="underline underline-offset-4"
-            style={{ color: XMAS.muted }}
+            className={SECONDARY_ACTION}
+            style={{ color: XMAS.redDark, borderColor: XMAS.redDark }}
           >
             Ritirati
           </button>
@@ -678,29 +689,37 @@ function Hero({ santa, now }: { santa: SecretSantaView; now: number }) {
   ].filter(Boolean) as { icon: IconName; label: string; value: string }[]
   return (
     <section className="xmas-rise space-y-5 text-center">
-      <SantaLogo className="mx-auto h-44 w-auto sm:h-52" />
-      <Eyebrow>Secret Santa PoliNetwork</Eyebrow>
-      <h1 id={`santa-${santa.id}`} className="text-4xl font-semibold tracking-tight text-balance sm:text-5xl">
-        {santa.title}
-      </h1>
-      {days >= 0 && (
-        <p
-          className="inline-flex items-center gap-2 rounded-full border bg-white/80 px-4 py-1.5 text-sm font-medium shadow-sm backdrop-blur-sm"
-          style={{ borderColor: XMAS.frost, color: XMAS.brand800 }}
+      <SantaLogo className="mx-auto h-32 w-auto sm:h-52" />
+      <div className="space-y-5">
+        <Eyebrow>Secret Santa PoliNetwork</Eyebrow>
+        <h1
+          id={`santa-${santa.id}`}
+          className="text-3xl font-semibold tracking-tight text-balance sm:text-5xl"
         >
-          <Icon name="star" className="size-4 text-amber-500" />
-          {days === 0
-            ? "Buon Natale!"
-            : days === 1
-              ? "Manca 1 giorno a Natale"
-              : `Mancano ${days} giorni a Natale`}
-        </p>
-      )}
-      {config.intro && (
-        <p className="mx-auto max-w-md text-pretty" style={{ color: XMAS.muted }}>
-          {config.intro}
-        </p>
-      )}
+          {santa.title}
+        </h1>
+        {days >= 0 && (
+          <p
+            className="inline-flex items-center gap-2 rounded-full border bg-white/80 px-4 py-1.5 text-sm font-medium shadow-sm backdrop-blur-sm"
+            style={{ borderColor: XMAS.frost, color: XMAS.brand800 }}
+          >
+            <Icon name="star" className="size-4 text-amber-500" />
+            {days === 0
+              ? "Buon Natale!"
+              : days === 1
+                ? "Manca 1 giorno a Natale"
+                : `Mancano ${days} giorni a Natale`}
+          </p>
+        )}
+        {config.intro && (
+          <p
+            className="mx-auto max-w-md rounded-2xl border border-sky-200 bg-white px-4 py-3 leading-relaxed text-pretty shadow-sm"
+            style={{ color: XMAS.muted }}
+          >
+            {config.intro}
+          </p>
+        )}
+      </div>
       {details.length > 0 && (
         <dl
           className="mx-auto grid max-w-md gap-px overflow-hidden rounded-2xl border text-left text-sm shadow-sm sm:grid-cols-2"
@@ -891,7 +910,7 @@ function Letter({
     }
   }
   const area =
-    "block w-full resize-none bg-transparent px-1 text-[17px] outline-none placeholder:text-slate-400 focus-visible:bg-sky-50"
+    "block w-full resize-none bg-transparent px-1 text-[17px] outline-none placeholder:text-slate-500 focus-visible:bg-sky-50"
   return (
     <Paper>
       <Stamp
@@ -990,9 +1009,6 @@ function Letter({
             </Ticket>
           </label>
         )}
-        <p className="text-right text-sm italic" style={{ color: XMAS.muted }}>
-          La leggerà solo il mio Secret Santa.
-        </p>
         <div className="flex items-center gap-3">
           <button
             type="submit"
@@ -1007,7 +1023,7 @@ function Letter({
             <button
               type="button"
               onClick={onCancel}
-              className="px-3 text-sm underline"
+              className={SECONDARY_ACTION}
               style={{ color: XMAS.muted }}
             >
               Annulla
@@ -1094,7 +1110,7 @@ function SendingLetter({ onDelivered }: { onDelivered: () => void }) {
       <button
         type="button"
         onClick={onDelivered}
-        className="mt-3 min-h-11 px-4 text-sm underline underline-offset-4"
+        className={`mt-3 ${SECONDARY_ACTION}`}
         style={{ color: XMAS.blue }}
       >
         Salta l'animazione
@@ -1540,17 +1556,19 @@ function Reveal({
           </>
         )}
       </div>
-      <button
-        type="button"
-        onClick={() => {
-          setCelebrate(false)
-          setStage("sealed")
-        }}
-        className="mx-auto mt-5 block min-h-11 px-4 text-sm underline underline-offset-4"
-        style={{ color: XMAS.blue }}
-      >
-        Rivedi l'apertura
-      </button>
+      <div className="mt-5 flex justify-center">
+        <button
+          type="button"
+          onClick={() => {
+            setCelebrate(false)
+            setStage("sealed")
+          }}
+          className={SECONDARY_ACTION}
+          style={{ color: XMAS.blue }}
+        >
+          Rivedi l'apertura
+        </button>
+      </div>
     </div>
   )
 }
