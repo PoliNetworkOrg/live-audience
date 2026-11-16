@@ -1,6 +1,6 @@
 import { Link } from "wouter"
 import { useApi } from "../../client/api.ts"
-import { Field, Input, Textarea, Toggle } from "../../client/ui.tsx"
+import { Field, Input, Toggle } from "../../client/ui.tsx"
 import { defineActivityUI } from "../ui-types.ts"
 import { SecretSantaAdmin } from "./admin.tsx"
 import { Snowfall, StringLights, TreeIllustration, XMAS } from "./decorations.tsx"
@@ -44,9 +44,6 @@ function Editor({
           onChange={(signupsOpen) => set({ signupsOpen })}
         />
       </div>
-      <Field label="Intro">
-        <Textarea value={config.intro} maxLength={600} onChange={(e) => set({ intro: e.target.value })} />
-      </Field>
       <div className="grid gap-3 sm:grid-cols-2">
         <Field label="Sign-ups close" hint="Date and time, your time zone. Empty: only by hand.">
           <Input

@@ -457,10 +457,10 @@ const LID_AJAR: CSSProperties = {
 }
 const LID_ORIGIN: CSSProperties = { transformBox: "view-box", transformOrigin: "12px 54px" }
 
-/** A present in PoliNetwork blue with a gold ribbon, optionally with a check badge on its corner. */
+/** A Christmas-red present with a gold ribbon and bow, optionally with a check badge on its corner. */
 export function GiftBox({
   className,
-  color = XMAS.blue,
+  color = XMAS.red,
   wrap = "tied",
   checked = false,
 }: {
@@ -546,6 +546,26 @@ export function GiftBox({
           />
         </g>
       )}
+    </svg>
+  )
+}
+
+/** The gift's bow on its own (gold unless told otherwise), to dress up buttons. */
+export function Bow({
+  className,
+  color = XMAS.gold,
+  shade = XMAS.goldDark,
+}: {
+  className?: string
+  color?: string
+  /** The darker loop and the knot. */
+  shade?: string
+}) {
+  return (
+    <svg viewBox="26 18 68 24" className={className} aria-hidden overflow="visible">
+      <path d="M60 36 C46 14 22 22 34 32 C39 36 52 37 60 36 Z" fill={color} />
+      <path d="M60 36 C74 14 98 22 86 32 C81 36 68 37 60 36 Z" fill={shade} />
+      <circle cx="60" cy="35" r="6" fill={shade} />
     </svg>
   )
 }

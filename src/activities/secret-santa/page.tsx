@@ -2,6 +2,7 @@ import { type CSSProperties, type ReactNode, useEffect, useEffectEvent, useRef, 
 import { Link } from "wouter"
 import { api, loginUrl, logout, type Me, useApi, useMe } from "../../client/api.ts"
 import {
+  Bow,
   Burst,
   Elf,
   GiftBox,
@@ -35,7 +36,17 @@ export const SECRET_SANTA_PATH = "/secret-santa"
 const PAPER = XMAS.white
 const INK = XMAS.navy
 const SECONDARY_ACTION =
-  "inline-flex min-h-11 items-center justify-center rounded-full border border-slate-300 bg-white px-5 py-2.5 text-sm font-semibold shadow-sm transition-colors hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-blue-600 disabled:cursor-not-allowed disabled:opacity-60"
+  "relative inline-flex min-h-11 items-center justify-center rounded-full border border-slate-300 bg-white px-5 py-2.5 text-sm font-semibold shadow-sm transition-colors hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-blue-600 disabled:cursor-not-allowed disabled:opacity-60"
+
+/** A secondary action filled with color, like a wrapped present (pair it with one of the *_FILL styles). */
+const FILLED_ACTION = `${SECONDARY_ACTION} hover:brightness-110`
+const BLUE_FILL: CSSProperties = { color: XMAS.white, background: XMAS.blue, borderColor: XMAS.blue }
+const RED_FILL: CSSProperties = { color: XMAS.white, background: XMAS.redDark, borderColor: XMAS.redDark }
+
+/** A little gold bow sitting on top of an action, so buttons look like wrapped presents. */
+function ActionBow() {
+  return <Bow className="pointer-events-none absolute -top-2.5 left-1/2 h-4 w-9 -translate-x-1/2" />
+}
 
 /** The current time, refreshed every `intervalMs`. */
 function useNow(intervalMs = 1000) {
@@ -151,10 +162,11 @@ function SignedOut() {
       </div>
       <a
         href={loginUrl(`${SECRET_SANTA_PATH}${window.location.search}${window.location.hash}`)}
-        className="inline-flex min-h-12 w-full items-center justify-center rounded-full px-4 py-3 text-base font-semibold text-white shadow-lg transition active:scale-[0.97] sm:px-6 sm:py-4 sm:text-lg"
+        className="relative inline-flex min-h-12 w-full items-center justify-center rounded-full px-4 py-3 text-base font-semibold text-white shadow-lg transition active:scale-[0.97] sm:px-6 sm:py-4 sm:text-lg"
         style={{ background: XMAS.blue }}
       >
         Accedi con PoliNetwork
+        <ActionBow />
       </a>
     </div>
   )
@@ -169,8 +181,9 @@ function SecretSantas() {
         <p role="alert" className="text-rose-700">
           {list.error.message}
         </p>
-        <button type="button" onClick={list.reload} className={SECONDARY_ACTION}>
+        <button type="button" onClick={list.reload} className={FILLED_ACTION} style={BLUE_FILL}>
           Riprova
+          <ActionBow />
         </button>
       </div>
     )
@@ -182,8 +195,9 @@ function SecretSantas() {
         <p style={{ color: XMAS.muted }}>
           Gli elfi stanno ancora preparando tutto. Torna più vicino a Natale!
         </p>
-        <Link href="/" className={SECONDARY_ACTION} style={{ color: XMAS.blue }}>
+        <Link href="/" className={FILLED_ACTION} style={BLUE_FILL}>
           Torna a PoliNetwork Live
+          <ActionBow />
         </Link>
       </div>
     )
@@ -313,7 +327,7 @@ function SantaExperience({
   } else if (!entry && !canJoin) {
     body = (
       <Paper className="text-center">
-        <GiftBox className="mx-auto h-24 w-24" color={XMAS.brand800} />
+        <GiftBox className="mx-auto h-24 w-24" />
         <p className="mt-3 text-xl font-semibold">
           {santa.drawn ? "L'estrazione è già stata fatta" : "Le iscrizioni sono chiuse"}
         </p>
@@ -333,7 +347,7 @@ function SantaExperience({
       />
     )
   } else if (!santa.drawn) {
-    body = <Waiting santa={santa} justJoined={justJoined} />
+    body = <Waiting justJoined={justJoined} />
   } else if (santa.match && letterKey) {
     body = (
       <Reveal
@@ -343,7 +357,6 @@ function SantaExperience({
         initiallyOpen={letter.opened}
         onOpened={onLetterOpened}
         match={santa.match}
-        exchange={config.exchange}
       />
     )
   } else {
@@ -359,7 +372,7 @@ function SantaExperience({
 
   return (
     <article aria-labelledby={`santa-${santa.id}`} className="space-y-10">
-      <Hero santa={santa} now={now} />
+      <Hero santa={santa} now={now} canJoin={canJoin} />
       <Steps santa={santa} />
       {!santa.drawn && <Countdown santa={santa} now={now} canJoin={canJoin} />}
       {body}
@@ -388,10 +401,11 @@ function SantaExperience({
             <button
               type="button"
               onClick={() => setEditing(true)}
-              className={SECONDARY_ACTION}
-              style={{ color: XMAS.blue }}
+              className={FILLED_ACTION}
+              style={BLUE_FILL}
             >
               Modifica la letterina
+              <ActionBow />
             </button>
           )}
           <button
@@ -401,10 +415,11 @@ function SantaExperience({
               withdrawalDialog.current?.showModal()
               withdrawalCancel.current?.focus()
             }}
-            className={SECONDARY_ACTION}
-            style={{ color: XMAS.redDark, borderColor: XMAS.redDark }}
+            className={FILLED_ACTION}
+            style={RED_FILL}
           >
             Ritirati
+            <ActionBow />
           </button>
         </div>
       )}
@@ -443,18 +458,21 @@ function SantaExperience({
             type="button"
             disabled={withdrawing}
             onClick={() => withdrawalDialog.current?.close()}
-            className="min-h-12 rounded-full px-4 py-3 font-semibold text-white focus-visible:outline-2 focus-visible:outline-offset-4 disabled:opacity-60"
+            className="relative min-h-12 rounded-full px-4 py-3 font-semibold text-white focus-visible:outline-2 focus-visible:outline-offset-4 disabled:opacity-60"
             style={{ background: XMAS.blue }}
           >
             Resta nel Secret Santa
+            <ActionBow />
           </button>
           <button
             type="button"
             disabled={withdrawing}
             onClick={() => void withdraw()}
-            className="min-h-12 rounded-full border border-rose-200 px-4 py-3 font-semibold text-rose-800 focus-visible:outline-2 focus-visible:outline-offset-4 disabled:opacity-60"
+            className="relative min-h-12 rounded-full px-4 py-3 font-semibold text-white transition hover:brightness-110 focus-visible:outline-2 focus-visible:outline-offset-4 disabled:opacity-60"
+            style={{ background: XMAS.redDark }}
           >
             {withdrawing ? "Ritiro in corso…" : "Conferma il ritiro"}
+            <ActionBow />
           </button>
         </div>
       </dialog>
@@ -535,9 +553,11 @@ function GiftConfirmation({
       ref={section}
       id={`gift-confirmation-${santa.id}`}
       aria-labelledby={`gift-confirmation-title-${santa.id}`}
-      className="xmas-rise relative scroll-mt-6 rounded-3xl border bg-white px-5 py-7 text-center shadow-[0_20px_50px_oklch(35%_0.06_250/0.12)] sm:px-8"
+      className="xmas-rise relative scroll-mt-6 rounded-3xl border bg-white px-5 pt-12 pb-7 text-center shadow-[0_20px_50px_oklch(35%_0.06_250/0.12)] sm:px-8"
       style={{ borderColor: XMAS.frost, animationDelay: entering ? "650ms" : undefined }}
     >
+      {/* Its own clip, so the gift's burst can still spill out of the card */}
+      <StringLights className="absolute inset-x-0 top-0 rounded-t-3xl" />
       {confirmed ? (
         <>
           <div className="relative mx-auto size-40">
@@ -599,11 +619,12 @@ function GiftConfirmation({
               <GiftBox wrap="open" className={`size-full ${saving || expired ? "" : "xmas-wobble"}`} />
             </span>
             <span
-              className="inline-flex min-h-11 items-center gap-2 rounded-full px-5 py-2.5 font-semibold text-white shadow-md transition group-disabled:shadow-none"
+              className="relative inline-flex min-h-11 items-center gap-2 rounded-full px-5 py-2.5 font-semibold text-white shadow-md transition group-disabled:shadow-none"
               style={{ background: saving || expired ? "oklch(72% 0.05 250)" : XMAS.blue }}
             >
               <Icon name="gift" className="size-5" />
               {saving ? "Conferma in corso…" : "Ho preso il regalo"}
+              <ActionBow />
             </span>
           </button>
           {!expired && santa.config.confirmationDueAt && (
@@ -668,15 +689,30 @@ function daysToChristmas(now: Date) {
   return Math.round((Date.UTC(now.getFullYear(), 11, 25) - today) / 86_400_000)
 }
 
-function Hero({ santa, now }: { santa: SecretSantaView; now: number }) {
+/**
+ * The line under the title follows the phase: the invitation while sign-ups are open, then news.
+ * People left out once sign-ups close get none: the card below explains.
+ */
+function heroIntro(santa: SecretSantaView, canJoin: boolean) {
+  if (santa.drawn)
+    return santa.entry
+      ? "L'estrazione è fatta! Scopri a chi fare il regalo e preparagli una bella sorpresa."
+      : ""
+  if (!canJoin) return santa.entry ? "Iscrizioni chiuse: gli elfi stanno preparando l'estrazione." : ""
+  return "Iscriviti, raccontaci cosa ti piace e riceverai una persona da sorprendere con un piccolo regalo."
+}
+
+function Hero({ santa, now, canJoin }: { santa: SecretSantaView; now: number; canJoin: boolean }) {
   const days = daysToChristmas(new Date(now))
   const { config } = santa
+  const intro = heroIntro(santa, canJoin)
   const details = [
-    config.signupsCloseAt && {
-      icon: "mail",
-      label: "Iscrizioni fino a",
-      value: formatWhen(config.signupsCloseAt),
-    },
+    canJoin &&
+      config.signupsCloseAt && {
+        icon: "mail",
+        label: "Iscrizioni fino a",
+        value: formatWhen(config.signupsCloseAt),
+      },
     config.drawAt && { icon: "shuffle", label: "Estrazione", value: formatWhen(config.drawAt) },
     config.exchange && { icon: "gift", label: "Scambio dei regali", value: config.exchange },
     config.budget && { icon: "coins", label: "Budget", value: config.budget },
@@ -711,12 +747,12 @@ function Hero({ santa, now }: { santa: SecretSantaView; now: number }) {
                 : `Mancano ${days} giorni a Natale`}
           </p>
         )}
-        {config.intro && (
+        {intro && (
           <p
             className="mx-auto max-w-md rounded-2xl border border-sky-200 bg-white px-4 py-3 leading-relaxed text-pretty shadow-sm"
             style={{ color: XMAS.muted }}
           >
-            {config.intro}
+            {intro}
           </p>
         )}
       </div>
@@ -1013,20 +1049,17 @@ function Letter({
           <button
             type="submit"
             disabled={!parsed.success || saving}
-            className="flex flex-1 items-center justify-center gap-2 rounded-full px-6 py-4 text-lg font-semibold text-white shadow-lg transition active:scale-[0.97] disabled:shadow-none disabled:active:scale-100"
+            className="relative flex flex-1 items-center justify-center gap-2 rounded-full px-6 py-4 text-lg font-semibold text-white shadow-lg transition active:scale-[0.97] disabled:shadow-none disabled:active:scale-100"
             style={{ background: parsed.success ? XMAS.blue : "oklch(80% 0.03 250)" }}
           >
             <Icon name="mail" className="size-5" />
-            {saving ? "Invio…" : entry ? "Salva la letterina" : "Spedisci al Polo Nord"}
+            {saving ? "Invio…" : entry ? "Spedisci" : "Spedisci al Polo Network"}
+            <ActionBow />
           </button>
           {onCancel && (
-            <button
-              type="button"
-              onClick={onCancel}
-              className={SECONDARY_ACTION}
-              style={{ color: XMAS.muted }}
-            >
+            <button type="button" onClick={onCancel} className={FILLED_ACTION} style={RED_FILL}>
               Annulla
+              <ActionBow />
             </button>
           )}
         </div>
@@ -1036,8 +1069,6 @@ function Letter({
 }
 
 // ---- waiting for the draw -----------------------------------------------------------------
-
-const MINI_GIFT_COLORS = [XMAS.blue, XMAS.brand800, XMAS.brand500, XMAS.red, XMAS.pine]
 
 const SEND_MS = 2700
 
@@ -1079,7 +1110,7 @@ function SendingLetter({ onDelivered }: { onDelivered: () => void }) {
             style={{ clipPath: "polygon(0 0, 50% 50%, 100% 0, 100% 100%, 0 100%)", color: XMAS.blue }}
           >
             <AirmailEdge />
-            Per il Polo Nord
+            Per il Polo Network
           </span>
           <span
             className="xmas-send-flap absolute inset-x-0 top-0 z-30 h-1/2 origin-top"
@@ -1102,15 +1133,16 @@ function SendingLetter({ onDelivered }: { onDelivered: () => void }) {
         </div>
       </div>
       <p role="status" className="text-xl font-semibold">
-        La tua letterina vola al Polo Nord!
+        La tua letterina vola al Polo Network!
       </p>
       <p className="mt-2 text-sm" style={{ color: XMAS.muted }}>
         Un elfo si occupa della consegna.
       </p>
+      {/* The only quiet action: no fill and no bow, it should not compete with the flying letter */}
       <button
         type="button"
         onClick={onDelivered}
-        className={`mt-3 ${SECONDARY_ACTION}`}
+        className="mt-2 inline-flex min-h-11 items-center justify-center rounded-full px-4 text-sm font-semibold underline-offset-4 transition-colors hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
         style={{ color: XMAS.blue }}
       >
         Salta l'animazione
@@ -1119,8 +1151,7 @@ function SendingLetter({ onDelivered }: { onDelivered: () => void }) {
   )
 }
 
-function Waiting({ santa, justJoined }: { santa: SecretSantaView; justJoined: boolean }) {
-  const shown = Math.min(santa.participants, 3)
+function Waiting({ justJoined }: { justJoined: boolean }) {
   const confirmation = useRef<HTMLHeadingElement>(null)
   useEffect(() => {
     if (justJoined) confirmation.current?.focus({ preventScroll: true })
@@ -1144,28 +1175,9 @@ function Waiting({ santa, justJoined }: { santa: SecretSantaView; justJoined: bo
         Ci sei!
       </h2>
       <p className="mt-1 text-pretty" style={{ color: XMAS.muted }}>
-        La tua letterina è nella cassetta del Polo Nord. Torna dopo l'estrazione per scoprire chi devi
+        La tua letterina è nella cassetta del Polo Network. Torna dopo l'estrazione per scoprire chi devi
         sorprendere.
       </p>
-      <div className="mt-6 space-y-2">
-        <div className="flex flex-wrap justify-center gap-1.5" aria-hidden>
-          {Array.from({ length: shown }, (_, i) => (
-            <span
-              // biome-ignore lint/suspicious/noArrayIndexKey: one icon per participant, no identity
-              key={i}
-              className="xmas-pop"
-              style={{ animationDelay: `${i * 60}ms` }}
-            >
-              <GiftBox className="size-6" color={MINI_GIFT_COLORS[i % MINI_GIFT_COLORS.length]} />
-            </span>
-          ))}
-        </div>
-        <p className="text-sm" style={{ color: XMAS.muted }}>
-          {santa.participants === 1
-            ? "1 persona iscritta finora"
-            : `${santa.participants} persone iscritte finora`}
-        </p>
-      </div>
     </Paper>
   )
 }
@@ -1395,7 +1407,6 @@ function Reveal({
   initiallyOpen,
   onOpened,
   match,
-  exchange,
 }: {
   activityId: string
   storageKey: string
@@ -1403,7 +1414,6 @@ function Reveal({
   /** Called once the letter is open and the name is showing (also when it already was). */
   onOpened: () => void
   match: NonNullable<SecretSantaView["match"]>
-  exchange: string
 }) {
   const [stage, setStage] = useState<RevealStage>(initiallyOpen ? "open" : "sealed")
   const [celebrate, setCelebrate] = useState(false)
@@ -1471,12 +1481,16 @@ function Reveal({
         <div className="flex h-88 items-end justify-center pb-3">
           <GoldenLetter opening={stage === "opening"} onOpen={open} />
         </div>
-        <p className="mt-8 text-2xl font-semibold tracking-tight">L'estrazione è fatta!</p>
-        <p aria-live="polite" className="mt-1" style={{ color: XMAS.muted }}>
-          {stage === "opening"
-            ? "Gli elfi la stanno aprendo… Tocca per saltare."
-            : "È arrivata una lettera dorata per te. Toccala per aprirla."}
-        </p>
+        {/* A white card, like the intro: the trees below would otherwise run through the text */}
+        <div className="relative mx-auto mt-8 max-w-md rounded-2xl border border-sky-200 bg-white px-4 pt-11 pb-3 shadow-sm">
+          <StringLights className="absolute inset-x-0 top-0 rounded-t-2xl" />
+          <p className="text-2xl font-semibold tracking-tight">L'estrazione è fatta!</p>
+          <p aria-live="polite" className="mt-1 text-pretty" style={{ color: XMAS.muted }}>
+            {stage === "opening"
+              ? "Gli elfi la stanno aprendo… Tocca per saltare."
+              : "È arrivata una lettera dorata per te. Toccala per aprirla."}
+          </p>
+        </div>
       </div>
     )
   }
@@ -1529,7 +1543,6 @@ function Reveal({
         </div>
         <p className="mt-5 text-center text-sm" style={{ color: XMAS.muted }}>
           Mi raccomando, acqua in bocca.
-          {exchange && <span className="block">Ci vediamo a: {exchange}</span>}
         </p>
         {celebrate && (
           <>
@@ -1563,10 +1576,11 @@ function Reveal({
             setCelebrate(false)
             setStage("sealed")
           }}
-          className={SECONDARY_ACTION}
-          style={{ color: XMAS.blue }}
+          className={FILLED_ACTION}
+          style={BLUE_FILL}
         >
           Rivedi l'apertura
+          <ActionBow />
         </button>
       </div>
     </div>
