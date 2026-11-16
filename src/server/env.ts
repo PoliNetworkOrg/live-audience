@@ -11,12 +11,8 @@ const schema = z
       .url()
       .refine((value) => {
         const url = new URL(value)
-        return (
-          !url.username &&
-          !url.password &&
-          (url.protocol === "https:" || (url.protocol === "http:" && isLocalhost(value)))
-        )
-      }, "MAILER_URL must use HTTPS (HTTP is allowed only on localhost)")
+        return !url.username && !url.password && (url.protocol === "https:" || url.protocol === "http:")
+      }, "MAILER_URL must use HTTP or HTTPS without embedded credentials")
       .optional(),
     MAILER_TOKEN: z.string().min(32).optional(),
 

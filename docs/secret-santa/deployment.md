@@ -23,7 +23,7 @@ non modificare a mano il numero di versione del database.
 Configurare:
 
 - `PUBLIC_URL=https://live.polinetwork.org`.
-- `MAILER_URL=https://<host-backend>/internal/secret-santa/emails`.
+- `MAILER_URL=http://<host-backend>:<porta>/internal/secret-santa/emails` per il collegamento interno senza TLS. HTTP funziona anche con nomi dei container e IP di rete locale; usare HTTPS se il collegamento attraversa una rete pubblica.
 - `MAILER_TOKEN`: lo stesso valore di `LIVE_MAILER_TOKEN` del backend.
 - OIDC issuer, client ID e client secret della registrazione di Live, con scope
   `openid profile email polinetwork:identity` e redirect `/auth/callback` sull'origine pubblica.

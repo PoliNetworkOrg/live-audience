@@ -8,7 +8,7 @@ POST autenticato `/api/secret-santa/:id/confirm-gift`: richiede iscrizione attiv
 
 Il job esistente prepara avvisi dopo la scadenza, ritenta invii falliti e, a mezzanotte, rimuove in una transazione tutti i non confermati. Confronta il ciclo iniziale e quello finale per notificare soltanto i superstiti interessati. La conferma dei superstiti è conservata. Avvisi diventati obsoleti vengono ignorati.
 
-Live invoca un endpoint email dedicato del backend tramite credenziale condivisa opzionale e HTTPS (HTTP solo localhost). Il backend valida tipo, destinatario e dati, limita il corpo e usa il mailer esistente; errori di invio non vengono riconosciuti come successi. Sviluppo senza credenziale usa il log, senza invii reali. Nessuna credenziale viene creata o pubblicata da questa implementazione.
+Live invoca un endpoint email dedicato del backend tramite credenziale condivisa opzionale e HTTP o HTTPS (HTTP supportato anche per il collegamento sulla rete interna). Il backend valida tipo, destinatario e dati, limita il corpo e usa il mailer esistente; errori di invio non vengono riconosciuti come successi. Sviluppo senza credenziale usa il log, senza invii reali. Nessuna credenziale viene creata o pubblicata da questa implementazione.
 
 Le mail di avviso/rimozione riutilizzano il layout natalizio del backend. La mail di riassegnazione distingue ritiro volontario da mancata conferma e non rivela il nuovo destinatario.
 

@@ -116,7 +116,7 @@ Live sends template data to the PoliNetwork backend; the backend uses its existi
 Set `MAILER_URL` on Live to `https://<backend>/internal/secret-santa/emails` and set the same random secret
 (at least 32 characters) in Live's `MAILER_TOKEN` and the backend's `LIVE_MAILER_TOKEN`. Set backend
 `LIVE_PUBLIC_URL` to Live's public origin (default `https://live.polinetwork.org`); email links are restricted
-to its `/secret-santa` page. HTTPS is required, except for localhost development.
+to its `/secret-santa` page. HTTP is supported for internal connections too, for example `http://backend:3000/internal/secret-santa/emails`. Use HTTPS when the connection crosses a public network.
 
 Without transport configuration, development logs notifications. In production missing configuration
 or delivery errors leave emails pending for retry; they are never marked as sent by logging. Configure
