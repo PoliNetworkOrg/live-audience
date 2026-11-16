@@ -244,18 +244,25 @@ function SantaExperience({
       setError(e instanceof Error ? e.message : "Qualcosa è andato storto")
     }
   }
+  const withdrawalDialog = useRef<HTMLDialogElement>(null)
+  const withdrawalCancel = useRef<HTMLButtonElement>(null)
+  const [withdrawing, setWithdrawing] = useState(false)
+  const [withdrawalError, setWithdrawalError] = useState<string | null>(null)
   const withdraw = async () => {
-    const warning = santa.drawn
-      ? "Vuoi ritirarti dal Secret Santa? La persona a cui dovevi fare il regalo avrà un nuovo Santa e non potrai più iscriverti."
-      : "Vuoi ritirarti dal Secret Santa? Puoi scrivere una nuova letterina fino alla chiusura delle iscrizioni."
-    if (!confirm(warning)) return
+    if (withdrawing) return
+    setWithdrawing(true)
+    setWithdrawalError(null)
     try {
-      onChange(await api<SecretSantaView>(`/api/secret-santa/${santa.id}/entry`, { method: "DELETE" }))
+      const next = await api<SecretSantaView>(`/api/secret-santa/${santa.id}/entry`, { method: "DELETE" })
+      withdrawalDialog.current?.close()
+      onChange(next)
       setEditing(false)
       setJustJoined(false)
       setError(null)
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Qualcosa è andato storto")
+      setWithdrawalError(e instanceof Error ? e.message : "Ritiro non riuscito. Riprova.")
+    } finally {
+      setWithdrawing(false)
     }
   }
 
@@ -373,7 +380,11 @@ function SantaExperience({
           )}
           <button
             type="button"
-            onClick={() => void withdraw()}
+            onClick={() => {
+              setWithdrawalError(null)
+              withdrawalDialog.current?.showModal()
+              withdrawalCancel.current?.focus()
+            }}
             className="underline underline-offset-4"
             style={{ color: XMAS.muted }}
           >
@@ -381,6 +392,56 @@ function SantaExperience({
           </button>
         </div>
       )}
+      <dialog
+        ref={withdrawalDialog}
+        aria-labelledby={`withdrawal-title-${santa.id}`}
+        aria-describedby={`withdrawal-description-${santa.id}`}
+        aria-busy={withdrawing}
+        onCancel={(event) => {
+          if (withdrawing) event.preventDefault()
+        }}
+        className="fixed inset-0 m-auto max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-md overflow-y-auto rounded-3xl border p-6 shadow-2xl backdrop:bg-slate-950/40 backdrop:backdrop-blur-sm"
+        style={{ background: XMAS.white, borderColor: XMAS.frost, color: XMAS.navy }}
+      >
+        <GiftBox className="mx-auto size-20" />
+        <h2 id={`withdrawal-title-${santa.id}`} className="mt-3 text-center text-2xl font-semibold">
+          Vuoi ritirarti dal Secret Santa?
+        </h2>
+        <p
+          id={`withdrawal-description-${santa.id}`}
+          className="mt-3 text-center"
+          style={{ color: XMAS.muted }}
+        >
+          {santa.drawn
+            ? "Gli abbinamenti saranno aggiornati e non potrai più iscriverti a questo giro."
+            : "Potrai scrivere una nuova letterina fino alla chiusura delle iscrizioni."}
+        </p>
+        {withdrawalError && (
+          <p role="alert" className="mt-4 text-center text-sm text-rose-800">
+            {withdrawalError}
+          </p>
+        )}
+        <div className="mt-6 flex flex-col gap-3">
+          <button
+            ref={withdrawalCancel}
+            type="button"
+            disabled={withdrawing}
+            onClick={() => withdrawalDialog.current?.close()}
+            className="min-h-12 rounded-full px-4 py-3 font-semibold text-white focus-visible:outline-2 focus-visible:outline-offset-4 disabled:opacity-60"
+            style={{ background: XMAS.blue }}
+          >
+            Resta nel Secret Santa
+          </button>
+          <button
+            type="button"
+            disabled={withdrawing}
+            onClick={() => void withdraw()}
+            className="min-h-12 rounded-full border border-rose-200 px-4 py-3 font-semibold text-rose-800 focus-visible:outline-2 focus-visible:outline-offset-4 disabled:opacity-60"
+          >
+            {withdrawing ? "Ritiro in corso…" : "Conferma il ritiro"}
+          </button>
+        </div>
+      </dialog>
     </article>
   )
 }
