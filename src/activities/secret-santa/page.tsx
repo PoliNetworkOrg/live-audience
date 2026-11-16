@@ -4,19 +4,17 @@ import { api, loginUrl, logout, type Me, useApi, useMe } from "../../client/api.
 import {
   Burst,
   Elf,
-  FlyingSleigh,
   GiftBox,
   Icon,
   type IconName,
   MysteryGift,
-  Snowfall,
   SnowPuff,
-  SnowyHills,
   Sparkle,
   Sparks,
   Stamp,
   StringLights,
   TreeIllustration,
+  WinterBackdrop,
   XMAS,
 } from "./decorations.tsx"
 import {
@@ -87,16 +85,7 @@ export function SecretSantaPage() {
         background: XMAS.ice,
       }}
     >
-      {/* Keep fixed children in one stable viewport, independent of mobile browser toolbar changes. */}
-      <div
-        aria-hidden
-        className="pointer-events-none fixed inset-x-0 top-0 h-lvh overflow-hidden [contain:strict]"
-        style={{ background: `linear-gradient(to bottom, ${XMAS.ice}, oklch(92% 0.035 240))` }}
-      >
-        <FlyingSleigh />
-        <SnowyHills />
-        <Snowfall />
-      </div>
+      <WinterBackdrop />
       <header className="relative z-10 pt-[env(safe-area-inset-top)]">
         <StringLights />
         <div className="mx-auto flex max-w-2xl items-center justify-between gap-3 px-5 pt-5">
@@ -113,7 +102,7 @@ export function SecretSantaPage() {
           {user && <UserChip user={user} />}
         </div>
       </header>
-      <main className="relative z-10 mx-auto w-full max-w-lg px-5 pt-8 pb-8 sm:pb-[46lvh]">{content}</main>
+      <main className="relative z-10 mx-auto w-full max-w-lg px-5 pt-8 pb-8 sm:pb-[46svh]">{content}</main>
     </div>
   )
 }

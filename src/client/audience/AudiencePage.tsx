@@ -1,11 +1,5 @@
 import { type ReactNode, useEffect, useState } from "react"
-import {
-  FlyingSleigh,
-  Snowfall,
-  SnowyHills,
-  StringLights,
-  XMAS,
-} from "../../activities/secret-santa/decorations.tsx"
+import { StringLights, WinterBackdrop } from "../../activities/secret-santa/decorations.tsx"
 import { SecretSantaTeasers, useSecretSantas } from "../../activities/secret-santa/ui.tsx"
 import { activityUIs } from "../../activities/ui-registry.ts"
 import { api, loginUrl, logout, type Me, useEventStream, useMe } from "../api.ts"
@@ -65,21 +59,12 @@ function useChristmas() {
  */
 function ChristmasScene() {
   return (
-    <div
-      aria-hidden
-      className="pointer-events-none fixed inset-x-0 top-0 z-0 h-lvh overflow-hidden [contain:strict]"
-      style={{
-        background: `radial-gradient(70rem 32rem at 50% -8rem, oklch(62% 0.17 255 / 0.16), transparent 70%), linear-gradient(to bottom, ${XMAS.ice} 0%, oklch(95% 0.025 240) 55%, oklch(92% 0.035 240) 100%)`,
-      }}
-    >
-      <FlyingSleigh />
-      <SnowyHills />
-      <Snowfall />
+    <WinterBackdrop>
       {/* Only where the screen is tall enough to give the garland its own strip above the header. */}
       <div className="absolute inset-x-0 top-[env(safe-area-inset-top)] hidden tall:block">
         <StringLights />
       </div>
-    </div>
+    </WinterBackdrop>
   )
 }
 
