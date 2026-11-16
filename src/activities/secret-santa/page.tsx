@@ -188,7 +188,15 @@ function SecretSantas() {
   return (
     <div className="space-y-24">
       {list.data.map((santa) => (
-        <SantaExperience key={santa.id} santa={santa} reload={list.reload} onChange={() => list.reload()} />
+        <SantaExperience
+          key={santa.id}
+          santa={santa}
+          reload={list.reload}
+          onChange={(updated) => {
+            list.setData((list.data ?? []).map((item) => (item.id === updated.id ? updated : item)))
+            list.reload()
+          }}
+        />
       ))}
     </div>
   )
@@ -990,9 +998,6 @@ function Letter({
             </Ticket>
           </label>
         )}
-        <p className="text-right text-sm italic" style={{ color: XMAS.muted }}>
-          La leggerà solo il mio Secret Santa.
-        </p>
         <div className="flex items-center gap-3">
           <button
             type="submit"
