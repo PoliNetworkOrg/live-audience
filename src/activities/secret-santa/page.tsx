@@ -1556,17 +1556,19 @@ function Reveal({
           </>
         )}
       </div>
-      <button
-        type="button"
-        onClick={() => {
-          setCelebrate(false)
-          setStage("sealed")
-        }}
-        className={`mx-auto mt-5 flex w-fit ${SECONDARY_ACTION}`}
-        style={{ color: XMAS.blue }}
-      >
-        Rivedi l'apertura
-      </button>
+      <div className="mt-5 flex justify-center">
+        <button
+          type="button"
+          onClick={() => {
+            setCelebrate(false)
+            setStage("sealed")
+          }}
+          className={SECONDARY_ACTION}
+          style={{ color: XMAS.blue }}
+        >
+          Rivedi l'apertura
+        </button>
+      </div>
     </div>
   )
 }
