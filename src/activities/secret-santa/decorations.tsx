@@ -96,7 +96,7 @@ export function Snowfall({ fixed = true }: { fixed?: boolean }) {
               animationDuration: `${flake.duration}s`,
               animationDelay: `${flake.delay}s`,
               "--drift": `${flake.drift}px`,
-              "--fall": fixed ? "110vh" : "16rem",
+              "--fall": fixed ? "110lvh" : "16rem",
             } as CSSProperties
           }
         >
@@ -116,7 +116,7 @@ export function Snowfall({ fixed = true }: { fixed?: boolean }) {
                 animationDuration: `${logo.duration}s`,
                 animationDelay: `${logo.delay}s`,
                 "--drift": `${logo.drift}px`,
-                "--fall": "calc(100vh + 6rem)",
+                "--fall": "calc(100lvh + 6rem)",
               } as CSSProperties
             }
           >
@@ -258,7 +258,7 @@ export function SnowyHills() {
   return (
     <div
       aria-hidden
-      className="pointer-events-none fixed inset-x-0 bottom-0 h-[46vh] min-h-72 overflow-hidden"
+      className="pointer-events-none fixed inset-x-0 bottom-0 h-[46lvh] min-h-72 overflow-hidden"
     >
       <svg
         aria-hidden
@@ -344,7 +344,7 @@ function Sleigh({ className }: { className?: string }) {
 /** Santa crossing the sky now and then, behind everything. Hidden for reduced motion. */
 export function FlyingSleigh() {
   return (
-    <div aria-hidden className="pointer-events-none fixed inset-x-0 top-[14vh] h-24 overflow-hidden">
+    <div aria-hidden className="pointer-events-none fixed inset-x-0 top-[14lvh] h-24 overflow-hidden">
       <div className="xmas-sleigh absolute top-0 left-0">
         <div className="xmas-sleigh-bob relative">
           <span className="absolute top-1/2 -left-24 h-px w-28 bg-gradient-to-r from-transparent to-amber-300/70" />

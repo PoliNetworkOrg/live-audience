@@ -84,12 +84,21 @@ export function SecretSantaPage() {
       className="relative min-h-dvh overflow-x-hidden"
       style={{
         color: INK,
-        background: `radial-gradient(70rem 32rem at 50% -8rem, oklch(62% 0.17 255 / 0.16), transparent 70%), linear-gradient(to bottom, ${XMAS.ice} 0%, oklch(95% 0.025 240) 55%, oklch(92% 0.035 240) 100%)`,
+        background: XMAS.ice,
       }}
     >
-      <FlyingSleigh />
-      <SnowyHills />
-      <Snowfall />
+      {/* Keep fixed children in one stable viewport, independent of mobile browser toolbar changes. */}
+      <div
+        aria-hidden
+        className="pointer-events-none fixed inset-x-0 top-0 h-lvh overflow-hidden [contain:strict]"
+        style={{ background: `linear-gradient(to bottom, ${XMAS.ice}, oklch(92% 0.035 240))` }}
+      >
+        <FlyingSleigh />
+        <SnowyHills />
+        <div className="opacity-40 sm:opacity-100">
+          <Snowfall />
+        </div>
+      </div>
       <header className="relative z-10 pt-[env(safe-area-inset-top)]">
         <StringLights />
         <div className="mx-auto flex max-w-2xl items-center justify-between gap-3 px-5 pt-5">
@@ -106,7 +115,9 @@ export function SecretSantaPage() {
           {user && <UserChip user={user} />}
         </div>
       </header>
-      <main className="relative z-10 mx-auto w-full max-w-lg px-5 pt-8 pb-[46vh]">{content}</main>
+      <main className="relative z-10 mx-auto mt-6 mb-8 w-[calc(100%-2rem)] max-w-lg rounded-3xl border border-white bg-white px-4 py-6 shadow-sm sm:mt-0 sm:mb-0 sm:w-full sm:rounded-none sm:border-0 sm:bg-transparent sm:px-5 sm:pt-8 sm:pb-[46lvh] sm:shadow-none">
+        {content}
+      </main>
     </div>
   )
 }
@@ -137,10 +148,10 @@ function UserChip({ user }: { user: Me }) {
 
 function SignedOut() {
   return (
-    <div className="xmas-rise space-y-6 text-center">
-      <SantaLogo className="mx-auto h-44 w-auto sm:h-52" />
+    <div className="xmas-rise space-y-4 text-center sm:space-y-6">
+      <SantaLogo className="mx-auto h-32 w-auto sm:h-52" />
       <Eyebrow>Secret Santa</Eyebrow>
-      <h1 className="text-4xl font-semibold tracking-tight text-balance sm:text-5xl">
+      <h1 className="text-3xl font-semibold tracking-tight text-balance sm:text-5xl">
         Qualcuno in PoliNetwork ha un regalo per te
       </h1>
       <p className="text-pretty" style={{ color: XMAS.muted }}>
@@ -148,7 +159,7 @@ function SignedOut() {
       </p>
       <a
         href={loginUrl(`${SECRET_SANTA_PATH}${window.location.search}${window.location.hash}`)}
-        className="inline-flex w-full items-center justify-center rounded-full px-6 py-4 text-lg font-semibold text-white shadow-lg transition active:scale-[0.97]"
+        className="inline-flex min-h-12 w-full items-center justify-center rounded-full px-4 py-3 text-base font-semibold text-white shadow-lg transition active:scale-[0.97] sm:px-6 sm:py-4 sm:text-lg"
         style={{ background: XMAS.blue }}
       >
         Accedi con PoliNetwork
@@ -686,9 +697,9 @@ function Hero({ santa, now }: { santa: SecretSantaView; now: number }) {
   ].filter(Boolean) as { icon: IconName; label: string; value: string }[]
   return (
     <section className="xmas-rise space-y-5 text-center">
-      <SantaLogo className="mx-auto h-44 w-auto sm:h-52" />
+      <SantaLogo className="mx-auto h-32 w-auto sm:h-52" />
       <Eyebrow>Secret Santa PoliNetwork</Eyebrow>
-      <h1 id={`santa-${santa.id}`} className="text-4xl font-semibold tracking-tight text-balance sm:text-5xl">
+      <h1 id={`santa-${santa.id}`} className="text-3xl font-semibold tracking-tight text-balance sm:text-5xl">
         {santa.title}
       </h1>
       {days >= 0 && (

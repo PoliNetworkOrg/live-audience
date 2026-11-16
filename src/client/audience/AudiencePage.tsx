@@ -67,7 +67,7 @@ function ChristmasScene() {
   return (
     <div
       aria-hidden
-      className="pointer-events-none fixed inset-0 z-0 overflow-hidden"
+      className="pointer-events-none fixed inset-x-0 top-0 z-0 h-lvh overflow-hidden [contain:strict]"
       style={{
         background: `radial-gradient(70rem 32rem at 50% -8rem, oklch(62% 0.17 255 / 0.16), transparent 70%), linear-gradient(to bottom, ${XMAS.ice} 0%, oklch(95% 0.025 240) 55%, oklch(92% 0.035 240) 100%)`,
       }}
