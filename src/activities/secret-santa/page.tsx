@@ -19,6 +19,7 @@ import {
   XMAS,
 } from "./decorations.tsx"
 import {
+  drawDueAt,
   GADGET_NAME,
   type SecretSantaConfig,
   type SecretSantaEntry,
@@ -229,8 +230,9 @@ function SantaExperience({
   onChange: (s: SecretSantaView) => void
 }) {
   const now = useNow()
-  // Once the automatic draw is due, look for it every 10 s, so the golden letter shows up by itself.
-  const drawDue = !santa.drawn && Boolean(santa.config.drawAt) && now >= Date.parse(santa.config.drawAt)
+  // Poll from the draw time, even while the result is held as a draft.
+  const resultAt = santa.config.revealAt || santa.config.drawAt
+  const drawDue = drawDueAt(santa.config, now)
   useEffect(() => {
     if (!drawDue && !santa.drawn) return
     const timer = setInterval(reload, 10_000)
@@ -382,8 +384,7 @@ function SantaExperience({
       {entry && !editing && !santa.hasEmail && !santa.drawn && (
         <Note>
           Non abbiamo il tuo indirizzo email, quindi non possiamo avvisarti dell'estrazione. Torna qui
-          {santa.config.drawAt ? ` dopo ${formatWhen(santa.config.drawAt)}` : " dopo l'estrazione"}, oppure
-          esci e rientra.
+          {resultAt ? ` dopo ${formatWhen(resultAt)}` : " dopo l'estrazione"}, oppure esci e rientra.
         </Note>
       )}
       {entry && !editing && <GadgetTicket santa={santa} />}
@@ -714,6 +715,8 @@ function Hero({ santa, now, canJoin }: { santa: SecretSantaView; now: number; ca
         value: formatWhen(config.signupsCloseAt),
       },
     config.drawAt && { icon: "shuffle", label: "Estrazione", value: formatWhen(config.drawAt) },
+    !santa.drawn &&
+      config.revealAt && { icon: "mail", label: "Risultato via email", value: formatWhen(config.revealAt) },
     config.exchange && { icon: "gift", label: "Scambio dei regali", value: config.exchange },
     config.budget && { icon: "coins", label: "Budget", value: config.budget },
     santa.drawn &&
@@ -791,13 +794,15 @@ function Hero({ santa, now, canJoin }: { santa: SecretSantaView; now: number; ca
 
 /** Big ice tiles counting down to the next moment: sign-ups closing, then the draw. */
 function Countdown({ santa, now, canJoin }: { santa: SecretSantaView; now: number; canJoin: boolean }) {
-  const { signupsCloseAt, drawAt } = santa.config
+  const { signupsCloseAt, drawAt, revealAt } = santa.config
   const target =
     canJoin && signupsCloseAt
       ? { label: "Le iscrizioni chiudono tra", at: Date.parse(signupsCloseAt) }
-      : drawAt
+      : drawAt && (!revealAt || now < Date.parse(drawAt))
         ? { label: "L'estrazione è tra", at: Date.parse(drawAt) }
-        : null
+        : revealAt
+          ? { label: "Scopri a chi fare il regalo tra", at: Date.parse(revealAt) }
+          : null
   if (!target) return null
   const left = Math.max(0, target.at - now)
   if (left === 0) {

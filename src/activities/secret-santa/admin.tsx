@@ -18,6 +18,8 @@ interface Participant {
 interface AdminView {
   revision: string
   drawnAt: number | null
+  /** The pairings are a draft: no email has gone out and participants cannot see them yet. */
+  held: boolean
   withoutEmail: number
   emailsSent: number
   counters: {
@@ -231,7 +233,11 @@ export function SecretSantaAdmin({ activityId, config }: { activityId: string; c
           onClick={() =>
             void control(
               "/draw",
-              `Estrarre i regali per ${data.participants.length} persone? Le iscrizioni si chiudono e partiranno le email.`,
+              `Estrarre i regali per ${data.participants.length} persone? Le iscrizioni si chiudono e ${
+                config.revealAt && Date.parse(config.revealAt) > Date.now()
+                  ? `le email partiranno il ${new Date(config.revealAt).toLocaleString("it-IT")}: fino ad allora potrai controllare e modificare gli abbinamenti.`
+                  : "partiranno subito le email."
+              }`,
             )
           }
         >
@@ -251,6 +257,20 @@ export function SecretSantaAdmin({ activityId, config }: { activityId: string; c
             Annulla estrazione
           </Button>
         )}
+        {data.held && (
+          <Button
+            variant="primary"
+            disabled={busy || editorOpen}
+            onClick={() =>
+              void control(
+                "/release",
+                "Inviare adesso le email dell'estrazione? Ognuno vedrà a chi fa il regalo e da lì ogni modifica manderà una mail di aggiornamento.",
+              )
+            }
+          >
+            Invia le email ora
+          </Button>
+        )}
         {data.drawnAt !== null && data.participants.length >= 3 && (
           <Button disabled={busy || editorOpen} onClick={() => setEditingCycle(true)}>
             Modifica abbinamenti
@@ -262,9 +282,11 @@ export function SecretSantaAdmin({ activityId, config }: { activityId: string; c
       </div>
       <p className="text-xs text-slate-500">
         {data.drawnAt !== null
-          ? `Estratto il ${new Date(data.drawnAt).toLocaleString("it-IT")}. Email estrazione inviate: ${data.emailsSent}/${data.participants.length}.`
+          ? data.held
+            ? `Estratto il ${new Date(data.drawnAt).toLocaleString("it-IT")}. Bozza visibile solo agli admin: puoi modificare gli abbinamenti senza che parta nessuna email.${config.revealAt ? ` Email e risultato ai partecipanti il ${new Date(config.revealAt).toLocaleString("it-IT")}.` : ""}`
+            : `Estratto il ${new Date(data.drawnAt).toLocaleString("it-IT")}. Email estrazione inviate: ${data.emailsSent}/${data.participants.length}.`
           : config.drawAt
-            ? `Estrazione automatica: ${new Date(config.drawAt).toLocaleString("it-IT")}.`
+            ? `Estrazione automatica: ${new Date(config.drawAt).toLocaleString("it-IT")}.${config.revealAt ? ` Invio email: ${new Date(config.revealAt).toLocaleString("it-IT")}.` : ""}`
             : "Nessuna estrazione automatica configurata."}
         {data.withoutEmail > 0 && ` ${data.withoutEmail} persone senza email.`}
       </p>
@@ -604,7 +626,9 @@ function CycleEditor({
           ))}
         </ul>
         <p className="mt-2 text-xs text-slate-500">
-          Le conferme dei regali restano valide. Le persone coinvolte ricevono una mail di aggiornamento.
+          {snapshot.held
+            ? "Le email non sono ancora partite: nessuno riceve aggiornamenti, ognuno avrà direttamente il destinatario corretto."
+            : "Le conferme dei regali restano valide. Le persone coinvolte ricevono una mail di aggiornamento."}
         </p>
       </div>
       <Field label="Motivo della correzione">

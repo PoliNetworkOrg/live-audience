@@ -52,7 +52,7 @@ function Editor({
             onChange={(e) => set({ signupsCloseAt: fromLocalInput(e.target.value) })}
           />
         </Field>
-        <Field label="Automatic gift draw" hint="Then everyone signed up gets an email. Empty: by hand.">
+        <Field label="Automatic gift draw" hint="Date and time, your time zone. Empty: by hand.">
           <Input
             type="datetime-local"
             value={toLocalInput(config.drawAt)}
@@ -60,6 +60,16 @@ function Editor({
           />
         </Field>
       </div>
+      <Field
+        label="Invio email estrazione"
+        hint="Fino a questo momento gli abbinamenti sono una bozza: solo gli admin li vedono e possono modificarli, senza mandare email. Vuoto: le email partono subito dopo l'estrazione."
+      >
+        <Input
+          type="datetime-local"
+          value={toLocalInput(config.revealAt)}
+          onChange={(e) => set({ revealAt: fromLocalInput(e.target.value) })}
+        />
+      </Field>
       <Field
         label="Conferma regalo entro"
         hint="Alla scadenza mandiamo l'ultimo avviso. Rimozione dei non confermati alla mezzanotte italiana dello stesso giorno. Vuoto: nessuna rimozione automatica."

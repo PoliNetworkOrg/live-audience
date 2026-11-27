@@ -68,6 +68,40 @@ describe("gift confirmation and expiry", () => {
   })
   afterEach(() => vi.useRealTimers())
 
+  it.each([true, false])("holds an overdue draw for admin recovery (draft exists: %s)", async (hasDraft) => {
+    const { store, activity, ids, mailer, view } = setup()
+    store.undoSecretSantaDraw(activity.id)
+    const config = {
+      ...secretSanta.defaultConfig(),
+      visible: true,
+      drawAt: "2026-12-02T10:00:00Z",
+      revealAt: "2026-12-03T10:00:00Z",
+      confirmationDueAt: due,
+    }
+    store.updateActivity(activity.id, { config })
+    if (hasDraft) store.runSecretSantaSchedule(Date.parse(config.drawAt))
+
+    vi.setSystemTime(midnight)
+    await runSecretSantaJobs(store, mailer, "https://live.example")
+    expect(store.getSecretSantaAdmin(activity.id).held).toBe(true)
+    expect(view(ids[0])).toMatchObject({ drawn: false, match: null, removed: null })
+    expect(mailer.sendSecretSanta).not.toHaveBeenCalled()
+    expect(mailer.sendSecretSantaStatus).not.toHaveBeenCalled()
+    const admin = { id: "admin", name: "Admin" }
+    expect(() => store.releaseSecretSantaDraw(activity.id, admin)).toThrow("nuova scadenza")
+
+    const confirmationDueAt = "2026-12-12T12:00:00Z"
+    store.updateActivity(activity.id, { config: { ...config, confirmationDueAt } })
+    await runSecretSantaJobs(store, mailer, "https://live.example")
+    expect(mailer.sendSecretSanta).toHaveBeenCalledTimes(ids.length)
+    expect(view(ids[0])).toMatchObject({
+      drawn: true,
+      confirmationClosesAt: confirmationClosesAt(confirmationDueAt),
+    })
+    store.confirmSecretSantaGift(activity.id, ids[0])
+    expect(view(ids[0]).giftConfirmedAt).toBe(midnight)
+  })
+
   it("ignores acknowledgments from a draw reset during mail delivery", async () => {
     const { store, activity, mailer } = setup()
     const oldDraw = store.pendingSecretSantaMails()[0]?.drawnAt

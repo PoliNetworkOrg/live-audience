@@ -431,3 +431,89 @@ describe("secret santa schedule and emails", () => {
     expect(reassigned).toEqual([])
   })
 })
+
+describe("secret santa draft before the emails", () => {
+  const minute = 60_000
+  const at = (offset: number) => new Date(Date.now() + offset).toISOString()
+  const mailerFor = (sent: SecretSantaMailWithLink[], reassigned: SecretSantaReassignMailWithLink[]) => ({
+    sendSecretSanta: async (mail: SecretSantaMailWithLink) => void sent.push(mail),
+    sendSecretSantaReassigned: async (mail: SecretSantaReassignMailWithLink) => void reassigned.push(mail),
+  })
+
+  it("rejects emails set before the draw, and a confirmation deadline before the emails", () => {
+    const config = { ...secretSanta.defaultConfig(), drawAt: at(10 * minute), revealAt: at(5 * minute) }
+    expect(secretSanta.configSchema.safeParse(config).success).toBe(false)
+    const valid = { ...config, revealAt: at(20 * minute) }
+    expect(secretSanta.configSchema.safeParse(valid).success).toBe(true)
+    expect(secretSanta.configSchema.safeParse({ ...valid, confirmationDueAt: at(15 * minute) }).success).toBe(
+      false,
+    )
+  })
+
+  it("holds the draw as an admin-only draft until revealAt, so corrections send no email", async () => {
+    const { join, activity, store, call } = setup({ drawAt: at(10 * minute), revealAt: at(60 * minute) })
+    const ids = ["a", "b", "c", "d"]
+    for (const id of ids) await join(id)
+    const sent: SecretSantaMailWithLink[] = []
+    const reassigned: SecretSantaReassignMailWithLink[] = []
+    const mailer = mailerFor(sent, reassigned)
+
+    expect(store.runSecretSantaSchedule(Date.now() + 11 * minute)).toEqual([activity.id])
+    await runSecretSantaJobs(store, mailer, "https://live.example")
+    expect(sent).toEqual([])
+    const [view] = (await call("/api/secret-santa", "a")).json
+    expect(view).toMatchObject({ drawn: false, match: null, canJoin: false })
+    // Nobody has read the letters yet: they can still be fixed.
+    expect((await join("a", "better likes")).status).toBe(200)
+    expect((await join("socio")).status).toBe(409)
+
+    const admin = (await call(`/api/admin/secret-santa/${activity.id}`, "admin")).json
+    expect(admin.held).toBe(true)
+    // biome-ignore lint/suspicious/noExplicitAny: admin payload
+    const current = Object.fromEntries(admin.participants.map((p: any) => [p.userId, p.match.userId]))
+    const reversed = Object.fromEntries(Object.entries(current).map(([giver, receiver]) => [receiver, giver]))
+    const patch = await call(`/api/admin/secret-santa/${activity.id}/assignments`, "admin", "PATCH", {
+      revision: admin.revision,
+      reason: "Coppia da evitare",
+      assignments: reversed,
+    })
+    expect(patch.status).toBe(200)
+    await runSecretSantaJobs(store, mailer, "https://live.example")
+    expect(sent).toEqual([])
+    expect(reassigned).toEqual([])
+
+    expect(store.releaseDueSecretSantaDraws(Date.now() + 61 * minute)).toEqual([activity.id])
+    await runSecretSantaJobs(store, mailer, "https://live.example")
+    expect(sent.map((m) => m.to).sort()).toEqual(ids.map((id) => `${id}@example.test`))
+    expect(reassigned).toEqual([])
+    expect(await cycleFrom(call, ids)).toEqual(reversed)
+    expect((await join("a", "too late")).status).toBe(409)
+  })
+
+  it("lets an admin send the draft out early", async () => {
+    const { join, activity, store, call } = setup({ revealAt: at(60 * minute) })
+    for (const id of ["a", "b", "c"]) await join(id)
+    const sent: SecretSantaMailWithLink[] = []
+    const mailer = mailerFor(sent, [])
+
+    expect((await call(`/api/admin/secret-santa/${activity.id}/draw`, "admin", "POST")).json.held).toBe(true)
+    await runSecretSantaJobs(store, mailer, "https://live.example")
+    expect(sent).toEqual([])
+    expect((await call(`/api/admin/secret-santa/${activity.id}/release`, "a", "POST")).status).toBe(403)
+    expect((await call(`/api/admin/secret-santa/${activity.id}/release`, "admin", "POST")).json.held).toBe(
+      false,
+    )
+    await runSecretSantaJobs(store, mailer, "https://live.example")
+    expect(sent).toHaveLength(3)
+    expect((await call("/api/secret-santa", "a")).json[0].drawn).toBe(true)
+  })
+
+  it("sends right after the draw when no email time is set", async () => {
+    const { join, activity, store, call } = setup()
+    for (const id of ["a", "b"]) await join(id)
+    expect((await call(`/api/admin/secret-santa/${activity.id}/draw`, "admin", "POST")).json.held).toBe(false)
+    const sent: SecretSantaMailWithLink[] = []
+    await runSecretSantaJobs(store, mailerFor(sent, []), "https://live.example")
+    expect(sent).toHaveLength(2)
+  })
+})

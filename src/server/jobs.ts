@@ -31,8 +31,8 @@ export const logMailer: Mailer = {
 }
 
 /**
- * Every `intervalMs`: runs the gift draws that are due, then sends the draw emails not sent yet and
- * the "your person withdrew" emails.
+ * Every `intervalMs`: runs the gift draws that are due, releases eligible drafts,
+ * then sends the draw emails not sent yet and the "your person withdrew" emails.
  * Failed emails stay pending and are retried on the next tick. Runs once right away.
  */
 export function startSecretSantaJobs({
@@ -64,8 +64,11 @@ export function startSecretSantaJobs({
 }
 
 export async function runSecretSantaJobs(store: Store, mailer: Mailer, publicUrl: string) {
-  for (const id of store.runSecretSantaSchedule()) console.log(`[secret-santa] automatic draw for ${id}`)
-  store.runSecretSantaConfirmationSchedule()
+  const now = Date.now()
+  for (const id of store.runSecretSantaSchedule(now)) console.log(`[secret-santa] automatic draw for ${id}`)
+  for (const id of store.releaseDueSecretSantaDraws(now))
+    console.log(`[secret-santa] draw emails released for ${id}`)
+  store.runSecretSantaConfirmationSchedule(now)
   const url = new URL("/secret-santa", publicUrl).href
   for (const mail of store.pendingSecretSantaMails()) {
     try {

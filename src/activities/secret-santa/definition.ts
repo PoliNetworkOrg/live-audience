@@ -20,8 +20,13 @@ const configSchema = z
     signupsOpen: z.boolean(),
     /** Sign-ups close on their own at this instant. */
     signupsCloseAt: instant,
-    /** The gift draw runs on its own at this instant, and everyone gets an email. */
+    /** The gift draw runs on its own at this instant. */
     drawAt: instant,
+    /**
+     * Draw emails go out, and people see who they give a gift to, at this instant. Until then the
+     * pairings are a draft only admins see and can change. "" sends them right after the draw.
+     */
+    revealAt: instant.default(""),
     /** Last reminder; confirmations close at the following midnight in Europe/Rome. */
     confirmationDueAt: instant.default(""),
     /** Where and when gifts are handed over in person. */
@@ -37,10 +42,21 @@ const configSchema = z
     message: "The draw must come after sign-ups close",
     path: ["drawAt"],
   })
+  .refine((c) => !c.revealAt || !c.drawAt || Date.parse(c.revealAt) >= Date.parse(c.drawAt), {
+    message: "The emails must go out after the draw",
+    path: ["revealAt"],
+  })
   .refine(
     (c) => !c.confirmationDueAt || !c.drawAt || Date.parse(c.confirmationDueAt) > Date.parse(c.drawAt),
     {
       message: "Gift confirmation must come after the draw",
+      path: ["confirmationDueAt"],
+    },
+  )
+  .refine(
+    (c) => !c.confirmationDueAt || !c.revealAt || Date.parse(c.confirmationDueAt) > Date.parse(c.revealAt),
+    {
+      message: "Gift confirmation must come after the emails go out",
       path: ["confirmationDueAt"],
     },
   )
@@ -53,8 +69,12 @@ const entrySchema = z.object({
 })
 export type SecretSantaEntry = z.infer<typeof entrySchema>
 
-/** Who gives a gift to whom: giver user id → receiver user id (null once a withdrawal leaves nobody). */
-export type SecretSantaDraw = { drawnAt: number; assignments: Record<string, string | null> }
+/**
+ * Who gives a gift to whom: giver user id → receiver user id (null once a withdrawal leaves nobody).
+ * `held` while the pairings are a draft waiting for `revealAt`: no emails, participants see nothing.
+ * Draws saved before it existed have no `held`: they are out.
+ */
+export type SecretSantaDraw = { drawnAt: number; assignments: Record<string, string | null>; held?: boolean }
 export type SecretSantaGadgetDraw = { drawnAt: number; winners: string[] }
 
 /** Counts only: names and pairings are personal and stay inside the app. */
@@ -101,6 +121,11 @@ export function signupsOpenAt(config: SecretSantaConfig, now: number) {
 /** Whether the automatic draw is due at `now` (ms). */
 export function drawDueAt(config: SecretSantaConfig, now: number) {
   return Boolean(config.drawAt) && now >= Date.parse(config.drawAt)
+}
+
+/** Whether a draw made at `now` (ms) goes out right away rather than waiting as a draft. */
+export function revealDueAt(config: SecretSantaConfig, now: number) {
+  return !config.revealAt || now >= Date.parse(config.revealAt)
 }
 
 /** Midnight after the deadline's Italian calendar date, including CET/CEST transitions. */
@@ -190,6 +215,7 @@ export const secretSanta = defineActivity<SecretSantaConfig, SecretSantaEntry, S
     signupsOpen: true,
     signupsCloseAt: "",
     drawAt: "",
+    revealAt: "",
     confirmationDueAt: "",
     exchange: "",
     budget: "",
