@@ -379,6 +379,9 @@ export function createApp({ store, session }: { store: Store; session: Middlewar
       store.drawSecretSanta(c.req.param("id"), c.get("user") as SessionUser)
       return c.json(store.getSecretSantaAdmin(c.req.param("id")))
     })
+    .post("/secret-santa/:id/release", (c) =>
+      c.json(store.releaseSecretSantaDraw(c.req.param("id"), c.get("user") as SessionUser)),
+    )
     .post("/secret-santa/:id/undo-draw", (c) =>
       c.json(store.undoSecretSantaDraw(c.req.param("id"), c.get("user") as SessionUser)),
     )
