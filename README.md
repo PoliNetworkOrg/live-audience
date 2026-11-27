@@ -118,12 +118,21 @@ Set `MAILER_URL` on Live to `https://<backend>/internal/secret-santa/emails` and
 `LIVE_PUBLIC_URL` to Live's public origin (default `https://live.polinetwork.org`); email links are restricted
 to its `/secret-santa` page. HTTP is supported for internal connections too, for example `http://backend:3000/internal/secret-santa/emails`. Use HTTPS when the connection crosses a public network.
 
+<!-- coderabbit-ai-generated:v1 -->
+
+<!-- coderabbit-ai-generated-section:v1:478edeb9e62026e55cca7d3c1dd47dddc5b093244aa00c066321c050a5877483 -->
+
 Without transport configuration, development logs notifications. In production missing configuration
 or delivery errors leave emails pending for retry; they are never marked as sent by logging. Configure
-delivery before enabling a confirmation deadline. A server outage does not extend the configured
-midnight deadline; warnings that have expired are replaced by removal notifications on recovery.
+delivery before enabling a confirmation deadline. For released draws, an outage
+does not extend the midnight deadline; expired warnings are replaced by removal notifications.
 Normal successful notifications are recorded once; a lost HTTP response after provider acceptance can
 cause a retry. The backend supplies stable Message-IDs for reconciliation.
+
+If a draft misses the scheduled confirmation reminder, it stays held until an organizer sets a future
+confirmation deadline or clears it to disable automatic removal.
+
+<!-- /coderabbit-ai-generated:v1 -->
 
 Email links require sign-in and an explicit confirmation button. Opening a link or email cannot confirm
 a gift. The date field is an ISO instant; midnight is calculated in Europe/Rome, including DST changes.

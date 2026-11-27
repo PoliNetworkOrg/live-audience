@@ -19,6 +19,7 @@ import {
   XMAS,
 } from "./decorations.tsx"
 import {
+  drawDueAt,
   GADGET_NAME,
   type SecretSantaConfig,
   type SecretSantaEntry,
@@ -229,9 +230,9 @@ function SantaExperience({
   onChange: (s: SecretSantaView) => void
 }) {
   const now = useNow()
-  // Once the result is due, look for it every 10 s, so the golden letter shows up by itself.
+  // Poll from the draw time, even while the result is held as a draft.
   const resultAt = santa.config.revealAt || santa.config.drawAt
-  const drawDue = !santa.drawn && Boolean(resultAt) && now >= Date.parse(resultAt)
+  const drawDue = drawDueAt(santa.config, now)
   useEffect(() => {
     if (!drawDue && !santa.drawn) return
     const timer = setInterval(reload, 10_000)

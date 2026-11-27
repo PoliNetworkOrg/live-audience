@@ -39,6 +39,11 @@ import {
 import type { StoredResponse } from "../activities/types.ts"
 import type { Database } from "./db.ts"
 
+/** An unreleased draft should never start in the final grace period. */
+function draftMissedConfirmationWindow(config: SecretSantaConfig, now: number) {
+  return Boolean(config.confirmationDueAt) && now >= Date.parse(config.confirmationDueAt)
+}
+
 export interface Activity {
   id: string
   slug: string
@@ -1028,7 +1033,9 @@ export class Store {
       const draw: SecretSantaDraw = {
         drawnAt: now,
         assignments: buildCycle(ids, (size) => randomInt(size)),
-        held: !revealDueAt(config, now),
+        held:
+          !revealDueAt(config, now) ||
+          (Boolean(config.revealAt) && draftMissedConfirmationWindow(config, now)),
       }
       this.db.exec("BEGIN")
       try {
@@ -1104,10 +1111,12 @@ export class Store {
    * they give a gift to. Idempotent.
    */
   releaseSecretSantaDraw(idOrSlug: string, actor: SantaAdminActor) {
-    const { activity } = this.requireSecretSanta(idOrSlug)
+    const { activity, config } = this.requireSecretSanta(idOrSlug)
     const draw = this.getSetting<SecretSantaDraw>(`santa-draw:${activity.id}`)
     if (!draw) throw new StoreError(409, "Prima esegui l'estrazione dei regali")
     if (draw.held) {
+      if (draftMissedConfirmationWindow(config, Date.now()))
+        throw new StoreError(409, "Imposta una nuova scadenza di conferma prima di inviare l'estrazione")
       this.db.exec("BEGIN")
       try {
         this.setSetting(`santa-draw:${activity.id}`, { ...draw, held: false })
@@ -1763,7 +1772,7 @@ export class Store {
     return drawn
   }
 
-  /** Lets out the held draws whose `revealAt` has come. Returns the ids of the activities it released. */
+  /** Releases due drafts that still have time before the confirmation reminder. */
   releaseDueSecretSantaDraws(now = Date.now()): string[] {
     const released: string[] = []
     for (const activity of this.listActivities()) {
@@ -1771,6 +1780,7 @@ export class Store {
       const draw = this.getSetting<SecretSantaDraw>(`santa-draw:${activity.id}`)
       const config = secretSanta.configSchema.safeParse(activity.config)
       if (!draw?.held || !config.success || !revealDueAt(config.data, now)) continue
+      if (draftMissedConfirmationWindow(config.data, now)) continue
       this.setSetting(`santa-draw:${activity.id}`, { ...draw, held: false })
       this.events.emit("results", activity.id)
       released.push(activity.id)
